@@ -1727,7 +1727,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                                 if l_own != &reff.own {
                                     return Err(TyError::ReferenceToWrongOwnership);
                                 }
-                                let mut borrowed_pl_expr = place_expr.clone();
+                                let borrowed_pl_expr = place_expr.clone();
                                 // self.place_expr_ty_under_exec_own(
                                 //     kind_ctx,
                                 //     ty_ctx,

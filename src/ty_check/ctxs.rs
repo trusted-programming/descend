@@ -336,7 +336,7 @@ impl TyCtx {
             }
         }
 
-        let mut ident_typed = self
+        let ident_typed = self
             .idents_typed_mut()
             .rev()
             .find(|ident_typed| ident_typed.ident == pl.ident)
