@@ -8,9 +8,17 @@ pub mod error;
 pub mod parser;
 pub mod ty_check;
 
-pub fn compile(file_path: &str) -> Result<String, ErrorReported> {
+pub enum Frontend {
+    Cuda,
+    AscendC,
+}
+
+pub fn compile(file_path: &str, frontend: Frontend) -> Result<String, ErrorReported> {
     let source = parser::SourceCode::from_file(file_path)?;
     let mut compil_unit = parser::parse(&source)?;
     ty_check::ty_check(&mut compil_unit)?;
-    Ok(codegen::gen(&compil_unit, false))
+    match frontend {
+        Frontend::Cuda => Ok(codegen::cuda::gen(&compil_unit, false)),
+        Frontend::AscendC => Ok(codegen::ascend::gen(&compil_unit, false)),
+    }
 }
