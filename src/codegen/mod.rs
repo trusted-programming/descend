@@ -1,2 +1,2 @@
-pub mod ascend;
+pub mod mlir;
 pub mod cuda;

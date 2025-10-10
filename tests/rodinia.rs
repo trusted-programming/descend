@@ -9,6 +9,6 @@ type Res = Result<(), descend::error::ErrorReported>;
 fn gaussian() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/rodinia/gaussian.desc", descend::Backend::Cuda)?
+        descend::compile("examples/rodinia/gaussian.desc", descend::Backend::Cuda)?.0
     ))
 }

@@ -8,7 +8,7 @@ type Res = Result<(), descend::error::ErrorReported>;
 fn transpose() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/transpose.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/transpose.desc", descend::Backend::Cuda)?.0
     ))
 }
 
@@ -19,7 +19,7 @@ fn transpose_shrd_mem() -> Res {
         descend::compile(
             "examples/infer/transpose_shrd_mem.desc",
             descend::Backend::Cuda
-        )?
+        )?.0
     ))
 }
 
@@ -27,7 +27,7 @@ fn transpose_shrd_mem() -> Res {
 fn matmul() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/matmul.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/matmul.desc", descend::Backend::Cuda)?.0
     ))
 }
 
@@ -35,7 +35,7 @@ fn matmul() -> Res {
 fn scale_vec() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/scale_vec.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/scale_vec.desc", descend::Backend::Cuda)?.0
     ))
 }
 
@@ -44,7 +44,7 @@ fn scale_vec() -> Res {
 fn reverse_vec() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/reverse_vec.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/reverse_vec.desc", descend::Backend::Cuda)?.0
     ))
 }
 
@@ -56,7 +56,7 @@ fn bitonic_sort() -> Res {
         descend::compile(
             "examples/infer/bitonic_sort/bitonic_sort.desc",
             descend::Backend::Cuda
-        )?
+        )?.0
     ))
 }
 
@@ -70,7 +70,7 @@ fn scan() -> Res {
     );
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/scan.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/scan.desc", descend::Backend::Cuda)?.0
     ))
 }
 
@@ -82,7 +82,7 @@ fn reduce_shared_mem() -> Res {
         descend::compile(
             "examples/infer/reduce_shared_mem.desc",
             descend::Backend::Cuda
-        )?
+        )?.0
     ))
 }
 
@@ -94,7 +94,7 @@ fn vlc_encode() -> Res {
         descend::compile(
             "examples/infer/huffman/vlc_encode.desc",
             descend::Backend::Cuda
-        )?
+        )?.0
     ))
 }
 
@@ -106,7 +106,7 @@ fn vlc_encode_cg() -> Res {
         descend::compile(
             "examples/infer/huffman/vlc_encode_cg.desc",
             descend::Backend::Cuda
-        )?
+        )?.0
     ))
 }
 
@@ -118,7 +118,7 @@ fn vlc_encode_reuse() -> Res {
         descend::compile(
             "examples/infer/huffman/vlc_encode_reuse.desc",
             descend::Backend::Cuda
-        )?
+        )?.0
     ))
 }
 
@@ -130,7 +130,7 @@ fn histogram() -> Res {
         descend::compile(
             "examples/infer/huffman/histogram.desc",
             descend::Backend::Cuda
-        )?
+        )?.0
     ))
 }
 
@@ -139,7 +139,7 @@ fn histogram() -> Res {
 fn tree_reduce() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/tree_reduce.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/tree_reduce.desc", descend::Backend::Cuda)?.0
     ))
 }
 
@@ -147,7 +147,7 @@ fn tree_reduce() -> Res {
 fn vector_add() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/vec_add.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/vec_add.desc", descend::Backend::Cuda)?.0
     ))
 }
 
@@ -156,7 +156,7 @@ fn vector_add() -> Res {
 fn bfs() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/bfs.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/bfs.desc", descend::Backend::Cuda)?.0
     ))
 }
 
@@ -165,7 +165,7 @@ fn bfs() -> Res {
 fn sgemm() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/sgemm.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/sgemm.desc", descend::Backend::Cuda)?.0
     ))
 }
 #[ignore]
@@ -176,7 +176,7 @@ fn shrd_mem_acc_equiv_exec() -> Res {
         descend::compile(
             "examples/shrd_mem_acc_equiv_exec.desc",
             descend::Backend::Cuda
-        )?
+        )?.0
     ))
 }
 
@@ -185,7 +185,7 @@ fn shrd_mem_acc_equiv_exec() -> Res {
 fn sssp_ffi_unsafe() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/sssp-ffi.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/sssp-ffi.desc", descend::Backend::Cuda)?.0
     ))
 }
 
@@ -194,6 +194,6 @@ fn sssp_ffi_unsafe() -> Res {
 fn jacobisvd() -> Res {
     Ok(println!(
         "{}",
-        descend::compile("examples/infer/jacobisvd.desc", descend::Backend::Cuda)?
+        descend::compile("examples/infer/jacobisvd.desc", descend::Backend::Cuda)?.0
     ))
 }
