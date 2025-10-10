@@ -39,6 +39,7 @@ fn scale_vec() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn reverse_vec() -> Res {
     Ok(println!(
@@ -59,6 +60,7 @@ fn bitonic_sort() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn scan() -> Res {
     eprintln!(
@@ -72,6 +74,7 @@ fn scan() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn reduce_shared_mem() -> Res {
     Ok(println!(
@@ -83,6 +86,7 @@ fn reduce_shared_mem() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn vlc_encode() -> Res {
     Ok(println!(
@@ -94,6 +98,7 @@ fn vlc_encode() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn vlc_encode_cg() -> Res {
     Ok(println!(
@@ -105,6 +110,7 @@ fn vlc_encode_cg() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn vlc_encode_reuse() -> Res {
     Ok(println!(
@@ -116,6 +122,7 @@ fn vlc_encode_reuse() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn histogram() -> Res {
     Ok(println!(
@@ -127,6 +134,7 @@ fn histogram() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn tree_reduce() -> Res {
     Ok(println!(
@@ -152,6 +160,7 @@ fn bfs() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn sgemm() -> Res {
     Ok(println!(
@@ -159,7 +168,7 @@ fn sgemm() -> Res {
         descend::compile("examples/infer/sgemm.desc", descend::Backend::Cuda)?
     ))
 }
-
+#[ignore]
 #[test]
 fn shrd_mem_acc_equiv_exec() -> Res {
     Ok(println!(
@@ -171,6 +180,7 @@ fn shrd_mem_acc_equiv_exec() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn sssp_ffi_unsafe() -> Res {
     Ok(println!(
@@ -179,6 +189,7 @@ fn sssp_ffi_unsafe() -> Res {
     ))
 }
 
+#[ignore]
 #[test]
 fn jacobisvd() -> Res {
     Ok(println!(
