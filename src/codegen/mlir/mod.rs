@@ -1,4 +1,4 @@
-mod mlir;
+mod bindings;
 
 use crate::ast as desc;
 
