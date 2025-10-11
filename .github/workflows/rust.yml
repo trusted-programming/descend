@@ -19,7 +19,7 @@ jobs:
     steps:
     - uses: actions/checkout@v5
     - name: install clang-format
-      run: apt-get install clang-format
+      run: apt-get update && apt-get install clang-format
     - name: Cache Rust
       uses: actions/cache@v4
       with:
