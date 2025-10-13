@@ -81,6 +81,42 @@ cargo build
 cargo test
 ```
 
+## Usage
+The Descend compiler can be run using cargo. To see all available options:
+```bash
+cargo run -- -h
+```
+
+### Basic Compilation
+Compile a Descend source file to CUDA (default backend):
+```bash
+cargo run -- path/to/your_file.desc
+```
+
+This will generate `your_file.out` in the current directory.
+
+### Backend Selection
+Compile to a specific backend (cuda or mlir):
+```bash
+cargo run -- path/to/your_file.desc cuda
+cargo run -- path/to/your_file.desc mlir
+```
+
+### Print AST
+Print the Abstract Syntax Tree using `-p` or `--print-ast`:
+```bash
+cargo run -- path/to/your_file.desc -p
+```
+
+This will generate both `your_file.out` and `your_file.ast` files.
+
+### Examples
+Compile a Descend example with type inference to CUDA:
+```bash
+cargo run -- descend-examples/infer/scale_vec.desc
+```
+
+
 ## Modules and Directories
 ast
 ---------------------

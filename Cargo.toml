@@ -6,8 +6,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
-melior = "0.25.0"
-
+melior = { version = "0.25", features = ["ods-dialects"] }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.peg]
@@ -19,6 +18,9 @@ features = ["color"]
 
 [dependencies.descend_derive]
 path = "./descend_derive"
+
+[build-dependencies]
+melior = { version = "0.25", features = ["ods-dialects"] }
 
 [workspace]
 members = ["descend_derive"]
