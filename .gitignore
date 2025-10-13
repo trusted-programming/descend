@@ -5,3 +5,7 @@ Cargo.lock
 *.out
 *.ast
 .cargo/config.toml
+/*.cu
+/*.mlir
+# Insta snapshot review files (actual .snap files should be committed)
+*.snap.new

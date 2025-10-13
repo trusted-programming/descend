@@ -1,0 +1,76 @@
+---
+source: tests/cuda/infer.rs
+expression: output
+---
+#include "descend.cuh"
+/*
+function declarations
+*/
+template <std::size_t gs, std::size_t bsx, std::size_t bsy, std::size_t width>
+__global__ auto par_transpose(const descend::f32 *const in_vec,
+                              descend::f32 *const out_vec) -> void;
+template <std::size_t gs, std::size_t bsx, std::size_t bsy, std::size_t width>
+__host__ auto transpose(descend::f32 *const h_vec) -> void;
+__host__ auto main(
+
+    ) -> void;
+/*
+function definitions
+*/
+template <std::size_t gs, std::size_t bsx, std::size_t bsy, std::size_t width>
+__global__ auto par_transpose(const descend::f32 *const in_vec,
+                              descend::f32 *const out_vec) -> void {
+  extern __shared__ descend::byte $buffer[];
+  descend::f32 *const tmp = (descend::f32 *)((&$buffer[0]));
+  {
+    {
+
+      {
+        {
+          for (std::size_t i = 0; (i < (bsx / bsy)); i = (i + 1u)) {
+            const auto tmp_tile = (&tmp[(
+                (((i * bsy) + (threadIdx.y - 0)) * bsx) + (threadIdx.x - 0))]);
+            (*tmp_tile) = in_vec[(
+                ((((blockIdx.x - 0) * bsx) + ((i * bsy) + (threadIdx.y - 0))) *
+                 width) +
+                (((blockIdx.y - 0) * bsx) + (threadIdx.x - 0)))];
+          }
+
+          __syncthreads();
+          for (std::size_t i = 0; (i < (bsx / bsy)); i = (i + 1u)) {
+            const auto tmp_tile = (&tmp[(
+                (((i * bsy) + (threadIdx.y - 0)) * bsx) + (threadIdx.x - 0))]);
+            out_vec[(
+                ((((blockIdx.y - 0) * bsx) + (((threadIdx.y - 0) * bsy) + i)) *
+                 width) +
+                (((blockIdx.x - 0) * bsx) + (threadIdx.x - 0)))] = (*tmp_tile);
+          }
+        }
+      }
+    }
+  }
+}
+
+template <std::size_t gs, std::size_t bsx, std::size_t bsy, std::size_t width>
+__host__ auto transpose(descend::f32 *const h_vec) -> void {
+  auto gpu = descend::gpu_device(0);
+  const auto d_vec = descend::gpu_alloc_copy<
+      descend::array<descend::array<descend::f32, width>, width>>((&gpu),
+                                                                  (&(*h_vec)));
+  auto d_vec_out = descend::gpu_alloc_copy<
+      descend::array<descend::array<descend::f32, width>, width>>((&gpu),
+                                                                  (&(*h_vec)));
+  par_transpose<gs, bsx, bsy, width>
+      <<<dim3(gs, gs, 1), dim3(bsx, bsy, 1), (0 + (4 * ((1 * bsx) * bsx)))>>>(
+          (&d_vec), (&d_vec_out));
+  descend::copy_to_host<
+      descend::array<descend::array<descend::f32, width>, width>>((&d_vec_out),
+                                                                  h_vec);
+}
+
+__host__ auto main(
+
+    ) -> void {
+  const auto vec = ;
+  transpose<256, 32, 8, (256 * 32)>(vec);
+}

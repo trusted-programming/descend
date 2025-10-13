@@ -1,7 +1,7 @@
 use clap::{Parser, ValueEnum};
-use std::path::{PathBuf};
-use std::fs;
 use descend::{self, compile};
+use std::fs;
+use std::path::PathBuf;
 
 /// CLI for compiling Descend source files to selected backend
 #[derive(Parser, Debug)]
@@ -56,13 +56,16 @@ fn main() {
         }
     };
 
-
-    // Generate output file path (same name but with .out extension)
+    // Generate output file path with appropriate extension based on backend
     let filename_stem = input_path.file_stem().unwrap_or_default().to_string_lossy();
-    let code_file = output_dir.join(format!("{}.out", filename_stem));
+    let extension = match args.backend {
+        BackendArg::Cuda => "cu",
+        BackendArg::Mlir => "mlir",
+    };
+    let code_file = output_dir.join(format!("{}.{}", filename_stem, extension));
     if print_ast {
         let ast_file = output_dir.join(format!("{}.ast", filename_stem));
-            // Write result to file
+        // Write result to file
         if let Err(e) = fs::write(&ast_file, ast_string) {
             eprintln!("Failed to write output file: {}", e);
             std::process::exit(1);

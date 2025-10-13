@@ -1,0 +1,4 @@
+
+fn main() -[t: cpu.thread]-> i32 {
+    42
+}
