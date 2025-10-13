@@ -1,0 +1,3 @@
+[submodule "ascend_dialects"]
+	path = ascend_dialects
+	url = https://gitcode.com/Ascend/AscendNPU-IR.git
