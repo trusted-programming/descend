@@ -1,5 +1,12 @@
 // Custom MLIR Dialects
 // The melior::dialect! macro generates Rust bindings for TableGen ODS files
+//
+// NOTE: The melior::dialect! macro requires absolute paths for include_directories
+// and does NOT support env!() or concat!() macro expansion. If you encounter build errors
+// about missing include files, update all include_directories paths below to match your
+// project location: <YOUR_PROJECT_ROOT>/AscendNPU-IR/bishengir/include
+//
+// You can use the helper script: ./scripts/update-dialect-paths.sh
 
 melior::dialect! {
     name: "annotation",
@@ -10,29 +17,25 @@ melior::dialect! {
     include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
 }
 
-// melior::dialect! {
-//     name: "hacc",
-//     files: [
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HACC/IR/HACCAttrs.td",
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HACC/IR/HACCBase.td",
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HACC/IR/HACCInterfaces.td",
-//     ],
-//     include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
-// }
+melior::dialect! {
+    name: "hacc",
+    files: [
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/HACC/IR/HACCBase.td",
+    ],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
+}
 
-// melior::dialect! {
-//     name: "hfusion",
-//     files: [
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionAttrs.td",
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionBase.td",
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionDoc.td",
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionEnums.td",
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionOps.td",
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionStructuredOps.td",
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionTraits.td",
-//     ],
-//     include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
-// }
+melior::dialect! {
+    name: "hfusion",
+    files: [
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionAttrs.td",
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionBase.td",
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionEnums.td",
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionOps.td",
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionTraits.td",
+    ],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
+}
 
 melior::dialect! {
     name: "hivm",
@@ -51,23 +54,23 @@ melior::dialect! {
     include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
 }
 
-// melior::dialect! {
-//     name: "mathext",
-//     files: [
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/MathExt/IR/MathExtBase.td",
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/MathExt/IR/MathExtOps.td",
-//     ],
-//     include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
-// }
+melior::dialect! {
+    name: "mathExt",
+    files: [
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/MathExt/IR/MathExtBase.td",
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/MathExt/IR/MathExtOps.td",
+    ],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
+}
 
-// melior::dialect! {
-//     name: "memrefext",
-//     files: [
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/MemRefExt/IR/MemRefExtBase.td",
-//         "AscendNPU-IR/bishengir/include/bishengir/Dialect/MemRefExt/IR/MemRefExtOps.td",
-//     ],
-//     include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
-// }
+melior::dialect! {
+    name: "memref_ext",
+    files: [
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/MemRefExt/IR/MemRefExtBase.td",
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/MemRefExt/IR/MemRefExtOps.td",
+    ],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
+}
 
 melior::dialect! {
     name: "symbol",

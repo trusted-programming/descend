@@ -5,15 +5,29 @@ extern crate descend;
 type Res = Result<(), descend::error::ErrorReported>;
 
 #[test]
-fn simple() -> Res {
-    let output = descend::compile("examples/simple.desc", descend::Backend::Mlir)?.0;
+fn constant() -> Res {
+    let output = descend::compile("examples/simple/const.desc", descend::Backend::Mlir)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
 
 #[test]
 fn add() -> Res {
-    let output = descend::compile("examples/add.desc", descend::Backend::Mlir)?.0;
+    let output = descend::compile("examples/simple/add.desc", descend::Backend::Mlir)?.0;
+    insta::assert_snapshot!(output);
+    Ok(())
+}
+
+#[test]
+fn lit() -> Res {
+    let output = descend::compile("examples/simple/lit.desc", descend::Backend::Mlir)?.0;
+    insta::assert_snapshot!(output);
+    Ok(())
+}
+
+#[test]
+fn binop() -> Res {
+    let output = descend::compile("examples/simple/binop.desc", descend::Backend::Mlir)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }

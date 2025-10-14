@@ -1,5 +1,5 @@
 pub mod builder;
-// pub mod dialects;  // Generated dialect bindings
+pub mod dialects;  // Generated dialect bindings
 pub mod to_mlir;
 
 use builder::MlirBuilder;
@@ -9,7 +9,6 @@ use melior::{
     utility::register_all_dialects,
     Context,
 };
-// use dialects::{hivm, annotation, symbol};
 
 use crate::ast::CompilUnit;
 
@@ -18,7 +17,8 @@ pub fn gen(comp_unit: &CompilUnit, _idx_checks: bool) -> String {
     let location = Location::unknown(&context);
     let module = Module::new(location);
     let mut builder = MlirBuilder::new(&context, module);
- 
+    
+    
     // Build each item in the compilation unit
     for item in &comp_unit.items {
         builder.build_item(item);
