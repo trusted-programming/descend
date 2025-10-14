@@ -1,0 +1,17 @@
+
+fn main() -[t: cpu.thread]-> i32 {
+    // Test all literal types
+    let unit_val = ();
+    let bool_true = true;
+    let bool_false = false;
+    let i32_val = 42;
+    let u8_val = 255u8;
+    let u32_val = 4294967295u32;
+    let u64_val = 18446744073709551615u64;
+    let f32_val = 3.14f32;
+    let f64_val = 2.718281828459045;
+    
+    // Return an i32 value
+    i32_val
+}
+
