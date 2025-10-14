@@ -1,2 +1,2 @@
-pub mod mlir;
 pub mod cuda;
+pub mod mlir;
