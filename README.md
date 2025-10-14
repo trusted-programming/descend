@@ -143,14 +143,33 @@ Required:
 - `clang-format`: Must be found in the system path.
 - `rustc` and `cargo`
 - `git`
+- **For MLIR backend**: MLIR installation with TableGen (included in the AscendNPU-IR submodule)
 
 Clone the repository and compile:
 
 ```bash
-git clone git@github.com:descend-lang/descend.git
+git clone git@github.com:descend-lang/descend.git --recurse-submodules
 cargo build
 cargo test
 ```
+
+### Building on Different Machines
+
+The MLIR backend uses custom dialect definitions that require absolute paths for TableGen include directories. If you encounter build errors about missing include files when building on a different machine or in a different directory:
+
+1. **Automatic Fix**: Run the provided script to update paths:
+
+   ```bash
+   ./scripts/update-dialect-paths.sh
+   ```
+
+2. **Manual Fix**: Edit `src/codegen/mlir/dialects.rs` and update all `include_directories` paths to:
+
+   ```
+   <YOUR_PROJECT_ROOT>/AscendNPU-IR/bishengir/include
+   ```
+
+**Why is this needed?** The `melior::dialect!` macro that generates Rust bindings from TableGen files only accepts string literals for include directories and cannot use Rust's `env!()` or `concat!()` macros for dynamic path resolution. The CI pipeline automatically runs the update script to ensure correct paths in different environments.
 
 ## Usage
 
