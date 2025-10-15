@@ -2,17 +2,12 @@ name: CI
 
 on:
   push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
+
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-A warnings"
-  LLVM_SYS_200_PREFIX: /usr/lib/llvm-20
-  MLIR_SYS_200_PREFIX: /usr/lib/llvm-20
-  TABLEGEN_200_PREFIX: /usr/lib/llvm-20
-
+  
 jobs:
   build-and-test:
     name: Build and Test
@@ -24,13 +19,36 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup LLVM 20 with MLIR
-        uses: aminya/setup-cpp@v1
+      - name: Add LLVM 20 repository
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/keyrings/llvm.asc
+          echo "deb [signed-by=/etc/apt/keyrings/llvm.asc] http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
+
+      - name: Install and cache LLVM/MLIR dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          compiler: llvm-20
-          cmake: true
-          ninja: true
-          clang-format: true
+          packages: >-
+            software-properties-common
+            build-essential
+            llvm-20
+            llvm-20-dev
+            clang-20
+            clang-tools-20
+            libclang-20-dev
+            lld-20
+            mlir-20-tools
+            libmlir-20-dev
+            libpolly-20-dev
+            clang-format-20
+            cmake
+            ninja-build
+            pkg-config
+            zlib1g-dev
+            libxml2-dev
+            libzstd-dev
+            libffi-dev
+          version: 1.0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -40,7 +58,14 @@ jobs:
 
       - name: Update MLIR dialect paths
         run: ./scripts/update-dialect-paths.sh
+      - name: Update MLIR dialect paths
+        run: ./scripts/update-dialect-paths.sh
 
+      - name: Build project
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
       - name: Build project
         run: cargo build --verbose
 
