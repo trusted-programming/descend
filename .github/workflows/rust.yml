@@ -1,76 +1,48 @@
-name: Rust
+name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-A warnings"
+  LLVM_SYS_200_PREFIX: /usr/lib/llvm-20
+  MLIR_SYS_200_PREFIX: /usr/lib/llvm-20
+  TABLEGEN_200_PREFIX: /usr/lib/llvm-20
 
 jobs:
-  build:
+  build-and-test:
+    name: Build and Test
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/trusted-programming/ascend-ci:latest
 
     steps:
-    - uses: actions/checkout@v5
-      with:
-        submodules: 'recursive'
-    
-    - name: Cache Submodules
-      uses: actions/cache@v4
-      with:
-        path: AscendNPU-IR
-        key: ${{ runner.os }}-submodule-${{ hashFiles('.gitmodules') }}
-        restore-keys: |
-          ${{ runner.os }}-submodule-
-    
-    - name: install clang-format
-      run: apt-get update && apt-get install -y clang-format
-    
-    - name: Free Disk Space
-      run: |
-        df -h
-        docker system prune -af || true
-        rm -rf /usr/share/dotnet
-        rm -rf /opt/ghc
-        rm -rf /usr/local/share/boost
-        rm -rf "$AGENT_TOOLSDIRECTORY"
-        df -h
-    
-    - name: Cache Rust Dependencies Only
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          target/release/deps
-          target/debug/deps
-        key: ${{ runner.os }}-cargo-deps-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-deps-
-    
-    - name: Install Rust
-      uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
 
-    - name: Update MLIR dialect paths
-      run: ./scripts/update-dialect-paths.sh
+      - name: Setup LLVM 20 with MLIR
+        uses: aminya/setup-cpp@v1
+        with:
+          compiler: llvm-20
+          cmake: true
+          ninja: true
+          clang-format: true
 
-    - name: Build
-      run: cargo build --verbose
-    
-    - name: Run tests
-      run: cargo test --verbose
-    
-    - name: Clean up build artifacts
-      if: always()
-      run: |
-        cargo clean --release || true
-        rm -rf target/debug/incremental
-        rm -rf target/debug/build
-        df -h
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Update MLIR dialect paths
+        run: ./scripts/update-dialect-paths.sh
+
+      - name: Build project
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
