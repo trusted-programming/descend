@@ -51,6 +51,21 @@ jobs:
             libffi-dev
           version: 1.0
 
+      - name: Configure LLVM alternatives
+        run: |
+          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-20 100
+          sudo update-alternatives --set llvm-config /usr/bin/llvm-config-20
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100
+          sudo update-alternatives --set clang /usr/bin/clang-20
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-20 100
+          sudo update-alternatives --set clang++ /usr/bin/clang++-20
+          sudo update-alternatives --install /usr/bin/mlir-tblgen mlir-tblgen /usr/bin/mlir-tblgen-20 100
+          sudo update-alternatives --set mlir-tblgen /usr/bin/mlir-tblgen-20
+          sudo update-alternatives --install /usr/bin/mlir-opt mlir-opt /usr/bin/mlir-opt-20 100
+          sudo update-alternatives --set mlir-opt /usr/bin/mlir-opt-20
+          sudo update-alternatives --install /usr/bin/mlir-translate mlir-translate /usr/bin/mlir-translate-20 100
+          sudo update-alternatives --set mlir-translate /usr/bin/mlir-translate-20
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
