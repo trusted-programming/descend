@@ -1,8 +1,5 @@
-#![cfg(test)]
-
-extern crate descend;
-
 type Res = Result<(), descend::error::ErrorReported>;
+
 use super::BACKEND;
 
 #[test]

@@ -94,3 +94,9 @@ impl std::fmt::Debug for ErrorReported {
         write!(f, "Aborting due to previous error.")
     }
 }
+
+impl std::fmt::Display for ErrorReported {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Aborting due to previous error.")
+    }
+}

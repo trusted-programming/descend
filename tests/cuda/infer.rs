@@ -1,9 +1,7 @@
-#![cfg(test)]
-
-extern crate descend;
-
 type Res = Result<(), descend::error::ErrorReported>;
+
 use super::BACKEND;
+
 #[test]
 fn transpose() -> Res {
     let output = descend::compile("examples/infer/transpose.desc", BACKEND)?.0;
