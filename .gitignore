@@ -1,11 +1,71 @@
-/target
-/.idea
+# Rust build artifacts
+/target/
 Cargo.lock
-/.vscode
+*.pdb
+
+# IDE and editor files
+/.idea/
+/.vscode/
+.cursor/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
 *.out
 *.ast
-.cargo/config.toml
+
+# MLIR and CUDA files
 /*.cu
 /*.mlir
+*.ll
+*.bc
+
+# Cargo configuration (may contain local settings)
+.cargo/config.toml
+
 # Insta snapshot review files (actual .snap files should be committed)
 *.snap.new
+
+# Build and dependency directories
+/build/
+/dist/
+/out/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Coverage reports
+/coverage/
+*.lcov
+
+# Profiling data
+*.prof
+perf.data*
+
+# Documentation build
+/book/
+/docs/_book/
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Test artifacts
+/test-results/
+/coverage/

@@ -3,35 +3,31 @@
 extern crate descend;
 
 type Res = Result<(), descend::error::ErrorReported>;
-
+use super::BACKEND;
 #[test]
 fn transpose() -> Res {
-    let output = descend::compile("examples/infer/transpose.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/transpose.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
 
 #[test]
 fn transpose_shrd_mem() -> Res {
-    let output = descend::compile(
-        "examples/infer/transpose_shrd_mem.desc",
-        descend::Backend::Cuda,
-    )?
-    .0;
+    let output = descend::compile("examples/infer/transpose_shrd_mem.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
 
 #[test]
 fn matmul() -> Res {
-    let output = descend::compile("examples/infer/matmul.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/matmul.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
 
 #[test]
 fn scale_vec() -> Res {
-    let output = descend::compile("examples/infer/scale_vec.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/scale_vec.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -39,7 +35,7 @@ fn scale_vec() -> Res {
 #[ignore]
 #[test]
 fn reverse_vec() -> Res {
-    let output = descend::compile("examples/infer/reverse_vec.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/reverse_vec.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -47,11 +43,7 @@ fn reverse_vec() -> Res {
 #[ignore]
 #[test]
 fn bitonic_sort() -> Res {
-    let output = descend::compile(
-        "examples/infer/bitonic_sort/bitonic_sort.desc",
-        descend::Backend::Cuda,
-    )?
-    .0;
+    let output = descend::compile("examples/infer/bitonic_sort/bitonic_sort.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -64,7 +56,7 @@ fn scan() -> Res {
     This is not the case for the fully typed version.\n\
     Solution: Keep track of the kinded arguments for dependent function separately depending on their kinds."
     );
-    let output = descend::compile("examples/infer/scan.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/scan.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -72,11 +64,7 @@ fn scan() -> Res {
 #[ignore]
 #[test]
 fn reduce_shared_mem() -> Res {
-    let output = descend::compile(
-        "examples/infer/reduce_shared_mem.desc",
-        descend::Backend::Cuda,
-    )?
-    .0;
+    let output = descend::compile("examples/infer/reduce_shared_mem.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -84,11 +72,7 @@ fn reduce_shared_mem() -> Res {
 #[ignore]
 #[test]
 fn vlc_encode() -> Res {
-    let output = descend::compile(
-        "examples/infer/huffman/vlc_encode.desc",
-        descend::Backend::Cuda,
-    )?
-    .0;
+    let output = descend::compile("examples/infer/huffman/vlc_encode.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -96,11 +80,7 @@ fn vlc_encode() -> Res {
 #[ignore]
 #[test]
 fn vlc_encode_cg() -> Res {
-    let output = descend::compile(
-        "examples/infer/huffman/vlc_encode_cg.desc",
-        descend::Backend::Cuda,
-    )?
-    .0;
+    let output = descend::compile("examples/infer/huffman/vlc_encode_cg.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -108,11 +88,7 @@ fn vlc_encode_cg() -> Res {
 #[ignore]
 #[test]
 fn vlc_encode_reuse() -> Res {
-    let output = descend::compile(
-        "examples/infer/huffman/vlc_encode_reuse.desc",
-        descend::Backend::Cuda,
-    )?
-    .0;
+    let output = descend::compile("examples/infer/huffman/vlc_encode_reuse.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -120,11 +96,7 @@ fn vlc_encode_reuse() -> Res {
 #[ignore]
 #[test]
 fn histogram() -> Res {
-    let output = descend::compile(
-        "examples/infer/huffman/histogram.desc",
-        descend::Backend::Cuda,
-    )?
-    .0;
+    let output = descend::compile("examples/infer/huffman/histogram.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -132,14 +104,14 @@ fn histogram() -> Res {
 #[ignore]
 #[test]
 fn tree_reduce() -> Res {
-    let output = descend::compile("examples/infer/tree_reduce.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/tree_reduce.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
 
 #[test]
 fn vector_add() -> Res {
-    let output = descend::compile("examples/infer/vec_add.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/vec_add.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -147,7 +119,7 @@ fn vector_add() -> Res {
 #[ignore]
 #[test]
 fn bfs() -> Res {
-    let output = descend::compile("examples/infer/bfs.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/bfs.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -155,18 +127,14 @@ fn bfs() -> Res {
 #[ignore]
 #[test]
 fn sgemm() -> Res {
-    let output = descend::compile("examples/infer/sgemm.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/sgemm.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
 #[ignore]
 #[test]
 fn shrd_mem_acc_equiv_exec() -> Res {
-    let output = descend::compile(
-        "examples/shrd_mem_acc_equiv_exec.desc",
-        descend::Backend::Cuda,
-    )?
-    .0;
+    let output = descend::compile("examples/shrd_mem_acc_equiv_exec.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -174,7 +142,7 @@ fn shrd_mem_acc_equiv_exec() -> Res {
 #[ignore]
 #[test]
 fn sssp_ffi_unsafe() -> Res {
-    let output = descend::compile("examples/infer/sssp-ffi.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/sssp-ffi.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }
@@ -182,7 +150,7 @@ fn sssp_ffi_unsafe() -> Res {
 #[ignore]
 #[test]
 fn jacobisvd() -> Res {
-    let output = descend::compile("examples/infer/jacobisvd.desc", descend::Backend::Cuda)?.0;
+    let output = descend::compile("examples/infer/jacobisvd.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())
 }

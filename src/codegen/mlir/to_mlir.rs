@@ -120,7 +120,13 @@ impl ToMlir for FunDef {
         let ret_ty = self.ret_dty.to_mlir(context);
 
         // Create MLIR function type
-        let function_type = FunctionType::new(context, &param_types, &[ret_ty]);
+        // For unit type (none), we don't include it in the return types
+        let return_types: Vec<Type<'c>> = if ret_ty.to_string() == "none" {
+            vec![]
+        } else {
+            vec![ret_ty]
+        };
+        let function_type = FunctionType::new(context, &param_types, &return_types);
 
         // Create function operation
         let location = Location::unknown(context);
@@ -246,9 +252,9 @@ mod tests {
     #[test]
     fn test_tuple_single_element_to_mlir() {
         let context = Context::new();
-        let data_ty = make_data_ty(DataTyKind::Tuple(vec![
-            make_data_ty(DataTyKind::Scalar(ScalarTy::I32))
-        ]));
+        let data_ty = make_data_ty(DataTyKind::Tuple(vec![make_data_ty(DataTyKind::Scalar(
+            ScalarTy::I32,
+        ))]));
         let mlir_type = data_ty.to_mlir(&context);
         assert_eq!(mlir_type.to_string(), "tuple<i32>");
     }
@@ -312,5 +318,4 @@ mod tests {
         let mlir_type = data_ty.to_mlir(&context);
         assert_eq!(mlir_type.to_string(), "memref<5xi32>");
     }
-
 }

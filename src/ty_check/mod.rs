@@ -498,34 +498,17 @@ fn ty_check_if_else(
             cond_ty
         )));
     }
-    if !matches_dty!(
-        case_true_ty,
-        DataTy {
-            dty: DataTyKind::Scalar(ScalarTy::Unit),
-            ..
-        }
-    ) {
+
+    // Both branches must return the same type
+    if case_true_ty != case_false_ty {
         return Err(TyError::String(format!(
-            "Body of the true case is not of unit type, instead got {:?}",
-            case_true_ty
-        )));
-    }
-    if !matches_dty!(
-        case_false_ty,
-        DataTy {
-            dty: DataTyKind::Scalar(ScalarTy::Unit),
-            ..
-        }
-    ) {
-        return Err(TyError::String(format!(
-            "Body of the false case is not of unit type, instead got {:?}",
-            case_false_ty
+            "If-else branches have different types: true branch has {:?}, false branch has {:?}",
+            case_true_ty, case_false_ty
         )));
     }
 
-    Ok(Ty::new(TyKind::Data(Box::new(DataTy::new(
-        DataTyKind::Scalar(ScalarTy::Unit),
-    )))))
+    // Return the type of the branches (they're the same)
+    Ok(case_true_ty.as_ref().clone())
 }
 
 fn ty_check_if(ctx: &mut ExprTyCtx, cond: &mut Expr, case_true: &mut Expr) -> TyResult<Ty> {

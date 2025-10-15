@@ -41,7 +41,7 @@ fn simple_unit() -> Res {
 }
 
 #[test]
-fn if_only() -> Res {
+fn if_test() -> Res {
     let output = descend::compile("examples/simple/if.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())

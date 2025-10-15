@@ -1,0 +1,14 @@
+fn main() -[t: cpu.thread]-> i32 {
+    let x = 10;
+    let y = 5;
+    
+    // Simple if without else
+    if x > y {
+        let result = x * 2;
+        ()
+    };
+    
+    // Return a value
+    42
+}
+

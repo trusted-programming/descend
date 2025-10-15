@@ -1,0 +1,36 @@
+---
+source: tests/cuda/simple.rs
+expression: output
+---
+#include "descend.cuh"
+/*
+function declarations
+*/
+__host__ auto main(
+
+    ) -> descend::i32;
+/*
+function definitions
+*/
+__host__ auto main(
+
+    ) -> descend::i32 {
+  const auto add_result = (10 + 5);
+  const auto sub_result = (20 - 8);
+  const auto mul_result = (6 * 7);
+  const auto div_result = (42 / 6);
+  const auto mod_result = (17 % 5);
+  const auto bitand_result = (15 & 7);
+  const auto bitor_result = (8 | 4);
+  const auto shl_result = (4 << 2);
+  const auto shr_result = (16 >> 2);
+  const auto eq_result = (5 == 5);
+  const auto neq_result = (5 != 3);
+  const auto lt_result = (3 < 7);
+  const auto le_result = (5 <= 5);
+  const auto gt_result = (10 > 8);
+  const auto ge_result = (9 >= 9);
+  const auto and_result = (eq_result && neq_result);
+  const auto or_result = (lt_result || le_result);
+  return (add_result + mul_result);
+}
