@@ -1,0 +1,10 @@
+---
+source: tests/mlir/simple.rs
+expression: output
+---
+module {
+  func.func @main() {
+    %c10_i32 = arith.constant 10 : i32
+    return
+  }
+}

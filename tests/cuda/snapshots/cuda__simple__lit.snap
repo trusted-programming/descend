@@ -1,0 +1,28 @@
+---
+source: tests/cuda/simple.rs
+expression: output
+---
+#include "descend.cuh"
+/*
+function declarations
+*/
+__host__ auto main(
+
+    ) -> descend::i32;
+/*
+function definitions
+*/
+__host__ auto main(
+
+    ) -> descend::i32 {
+  const auto unit_val = ;
+  const auto bool_true = true;
+  const auto bool_false = false;
+  const auto i32_val = 42;
+  const auto u8_val = ((descend::u8)255);
+  const auto u32_val = 4294967295u;
+  const auto u64_val = 18446744073709551615ull;
+  const auto f32_val = 3.14;
+  const auto f64_val = 2.718281828459045;
+  return i32_val;
+}

@@ -1,76 +1,82 @@
-name: Rust
+name: CI
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-A warnings"
-
+  LLVM_CONFIG: /usr/bin/llvm-config-20
+  
 jobs:
-  build:
+  build-and-test:
+    name: Build and Test
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/trusted-programming/ascend-ci:latest
 
     steps:
-    - uses: actions/checkout@v5
-      with:
-        submodules: 'recursive'
-    
-    - name: Cache Submodules
-      uses: actions/cache@v4
-      with:
-        path: AscendNPU-IR
-        key: ${{ runner.os }}-submodule-${{ hashFiles('.gitmodules') }}
-        restore-keys: |
-          ${{ runner.os }}-submodule-
-    
-    - name: install clang-format
-      run: apt-get update && apt-get install -y clang-format
-    
-    - name: Free Disk Space
-      run: |
-        df -h
-        docker system prune -af || true
-        rm -rf /usr/share/dotnet
-        rm -rf /opt/ghc
-        rm -rf /usr/local/share/boost
-        rm -rf "$AGENT_TOOLSDIRECTORY"
-        df -h
-    
-    - name: Cache Rust Dependencies Only
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry/index
-          ~/.cargo/registry/cache
-          ~/.cargo/git/db
-          target/release/deps
-          target/debug/deps
-        key: ${{ runner.os }}-cargo-deps-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-deps-
-    
-    - name: Install Rust
-      uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
 
-    - name: Update MLIR dialect paths
-      run: ./scripts/update-dialect-paths.sh
+      - name: Add LLVM 20 repository
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/keyrings/llvm.asc
+          echo "deb [signed-by=/etc/apt/keyrings/llvm.asc] http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
 
-    - name: Build
-      run: cargo build --verbose
-    
-    - name: Run tests
-      run: cargo test --verbose
-    
-    - name: Clean up build artifacts
-      if: always()
-      run: |
-        cargo clean --release || true
-        rm -rf target/debug/incremental
-        rm -rf target/debug/build
-        df -h
+      - name: Install and cache LLVM/MLIR dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: >-
+            software-properties-common
+            build-essential
+            llvm-20
+            llvm-20-dev
+            clang-20
+            clang-tools-20
+            libclang-20-dev
+            lld-20
+            mlir-20-tools
+            libmlir-20-dev
+            libpolly-20-dev
+            clang-format-20
+            cmake
+            ninja-build
+            pkg-config
+            zlib1g-dev
+            libxml2-dev
+            libzstd-dev
+            libffi-dev
+          version: 1.0
+
+      - name: Configure LLVM alternatives
+        run: |
+          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-20 100
+          sudo update-alternatives --set llvm-config /usr/bin/llvm-config-20
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100
+          sudo update-alternatives --set clang /usr/bin/clang-20
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-20 100
+          sudo update-alternatives --set clang++ /usr/bin/clang++-20
+          sudo update-alternatives --install /usr/bin/mlir-tblgen mlir-tblgen /usr/bin/mlir-tblgen-20 100
+          sudo update-alternatives --set mlir-tblgen /usr/bin/mlir-tblgen-20
+          sudo update-alternatives --install /usr/bin/mlir-opt mlir-opt /usr/bin/mlir-opt-20 100
+          sudo update-alternatives --set mlir-opt /usr/bin/mlir-opt-20
+          sudo update-alternatives --install /usr/bin/mlir-translate mlir-translate /usr/bin/mlir-translate-20 100
+          sudo update-alternatives --set mlir-translate /usr/bin/mlir-translate-20
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Update MLIR dialect paths
+        run: ./scripts/update-dialect-paths.sh
+
+      - name: Build project
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose

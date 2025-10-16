@@ -23,7 +23,7 @@ path = "./descend_derive"
 melior = { version = "0.25", features = ["ods-dialects"] }
 
 [dev-dependencies]
-insta = { version = "1.40", features = ["glob"] }
+insta = { version = "1.43.2", features = ["glob"] }
 
 [workspace]
 members = ["descend_derive"]

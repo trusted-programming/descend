@@ -1,11 +1,11 @@
 use melior::{
-    dialect::{arith, arith::CmpiPredicate, func},
+    dialect::{arith, arith::CmpiPredicate, func, scf},
     ir::{
-        attribute::{FloatAttribute, IntegerAttribute}, 
-        operation::OperationLike, 
-        r#type::IntegerType, 
-        Block,
-        BlockLike, BlockRef, Location, Module, RegionLike, Type, Value,
+        attribute::{FloatAttribute, IntegerAttribute},
+        operation::OperationBuilder,
+        operation::OperationLike,
+        r#type::IntegerType,
+        Block, BlockLike, BlockRef, Location, Module, Region, RegionLike, Type, Value, ValueLike,
     },
     Context,
 };
@@ -14,7 +14,6 @@ use std::collections::HashMap;
 use super::to_mlir::ToMlir;
 use crate::ast as desc;
 use desc::{BinOp, Pattern};
-
 
 /// Context for MLIR code generation with state management
 pub struct MlirContext<'ctx, 'a, 'b> {
@@ -127,12 +126,48 @@ where
                 BinOp::Mod => arith::remsi(lhs_value, rhs_value, location),
                 BinOp::And => arith::andi(lhs_value, rhs_value, location),
                 BinOp::Or => arith::ori(lhs_value, rhs_value, location),
-                BinOp::Eq => arith::cmpi(ctx.context, CmpiPredicate::Eq, lhs_value, rhs_value, location),
-                BinOp::Lt => arith::cmpi(ctx.context, CmpiPredicate::Slt, lhs_value, rhs_value, location),
-                BinOp::Le => arith::cmpi(ctx.context, CmpiPredicate::Sle, lhs_value, rhs_value, location),
-                BinOp::Gt => arith::cmpi(ctx.context, CmpiPredicate::Sgt, lhs_value, rhs_value, location),
-                BinOp::Ge => arith::cmpi(ctx.context, CmpiPredicate::Sge, lhs_value, rhs_value, location),
-                BinOp::Neq => arith::cmpi(ctx.context, CmpiPredicate::Ne, lhs_value, rhs_value, location),
+                BinOp::Eq => arith::cmpi(
+                    ctx.context,
+                    CmpiPredicate::Eq,
+                    lhs_value,
+                    rhs_value,
+                    location,
+                ),
+                BinOp::Lt => arith::cmpi(
+                    ctx.context,
+                    CmpiPredicate::Slt,
+                    lhs_value,
+                    rhs_value,
+                    location,
+                ),
+                BinOp::Le => arith::cmpi(
+                    ctx.context,
+                    CmpiPredicate::Sle,
+                    lhs_value,
+                    rhs_value,
+                    location,
+                ),
+                BinOp::Gt => arith::cmpi(
+                    ctx.context,
+                    CmpiPredicate::Sgt,
+                    lhs_value,
+                    rhs_value,
+                    location,
+                ),
+                BinOp::Ge => arith::cmpi(
+                    ctx.context,
+                    CmpiPredicate::Sge,
+                    lhs_value,
+                    rhs_value,
+                    location,
+                ),
+                BinOp::Neq => arith::cmpi(
+                    ctx.context,
+                    CmpiPredicate::Ne,
+                    lhs_value,
+                    rhs_value,
+                    location,
+                ),
                 BinOp::Shl => arith::shli(lhs_value, rhs_value, location),
                 BinOp::Shr => arith::shrsi(lhs_value, rhs_value, location),
                 BinOp::BitOr => arith::ori(lhs_value, rhs_value, location),
@@ -143,7 +178,6 @@ where
             Some(op_ref.result(0).unwrap().into())
         }
         ExprKind::Let(pattern, _ty, value_expr) => {
-
             // Evaluate the value expression
             let value = build_expr(value_expr, ctx)?;
 
@@ -173,25 +207,53 @@ where
         }
         ExprKind::Array(_) => unimplemented!("Array expressions not yet supported in MLIR backend"),
         ExprKind::Tuple(_) => unimplemented!("Tuple expressions not yet supported in MLIR backend"),
-        ExprKind::Ref(_, _, _) => unimplemented!("Reference expressions not yet supported in MLIR backend"),
-        ExprKind::LetUninit(_, _, _) => unimplemented!("Uninitialized let bindings not yet supported in MLIR backend"),
-        ExprKind::Assign(_, _) => unimplemented!("Assignment expressions not yet supported in MLIR backend"),
-        ExprKind::IdxAssign(_, _, _) => unimplemented!("Index assignment not yet supported in MLIR backend"),
-        ExprKind::App(_, _, _) => unimplemented!("Function application not yet supported in MLIR backend"),
-        ExprKind::DepApp(_, _) => unimplemented!("Dependent application not yet supported in MLIR backend"),
-        ExprKind::AppKernel(_) => unimplemented!("Kernel application not yet supported in MLIR backend"),
-        ExprKind::IfElse(_, _, _) => unimplemented!("If-else expressions not yet supported in MLIR backend"),
-        ExprKind::If(_, _) => unimplemented!("If expressions not yet supported in MLIR backend"),
+        ExprKind::Ref(_, _, _) => {
+            unimplemented!("Reference expressions not yet supported in MLIR backend")
+        }
+        ExprKind::LetUninit(_, _, _) => {
+            unimplemented!("Uninitialized let bindings not yet supported in MLIR backend")
+        }
+        ExprKind::Assign(_, _) => {
+            unimplemented!("Assignment expressions not yet supported in MLIR backend")
+        }
+        ExprKind::IdxAssign(_, _, _) => {
+            unimplemented!("Index assignment not yet supported in MLIR backend")
+        }
+        ExprKind::App(_, _, _) => {
+            unimplemented!("Function application not yet supported in MLIR backend")
+        }
+        ExprKind::DepApp(_, _) => {
+            unimplemented!("Dependent application not yet supported in MLIR backend")
+        }
+        ExprKind::AppKernel(_) => {
+            unimplemented!("Kernel application not yet supported in MLIR backend")
+        }
+        ExprKind::IfElse(cond, case_true, case_false) => {
+            build_if_else(cond, case_true, case_false, ctx)
+        }
+        ExprKind::If(cond, case_true) => build_if(cond, case_true, ctx),
         ExprKind::For(_, _, _) => unimplemented!("For loops not yet supported in MLIR backend"),
-        ExprKind::ForNat(_, _, _) => unimplemented!("For-nat loops not yet supported in MLIR backend"),
+        ExprKind::ForNat(_, _, _) => {
+            unimplemented!("For-nat loops not yet supported in MLIR backend")
+        }
         ExprKind::While(_, _) => unimplemented!("While loops not yet supported in MLIR backend"),
-        ExprKind::UnOp(_, _) => unimplemented!("Unary operations not yet supported in MLIR backend"),
-        ExprKind::Cast(_, _) => unimplemented!("Cast expressions not yet supported in MLIR backend"),
+        ExprKind::UnOp(_, _) => {
+            unimplemented!("Unary operations not yet supported in MLIR backend")
+        }
+        ExprKind::Cast(_, _) => {
+            unimplemented!("Cast expressions not yet supported in MLIR backend")
+        }
         ExprKind::Split(_) => unimplemented!("Split expressions not yet supported in MLIR backend"),
-        ExprKind::Sched(_) => unimplemented!("Schedule expressions not yet supported in MLIR backend"),
+        ExprKind::Sched(_) => {
+            unimplemented!("Schedule expressions not yet supported in MLIR backend")
+        }
         ExprKind::Sync(_) => unimplemented!("Sync expressions not yet supported in MLIR backend"),
-        ExprKind::Unsafe(_) => unimplemented!("Unsafe expressions not yet supported in MLIR backend"),
-        ExprKind::Range(_, _) => unimplemented!("Range expressions not yet supported in MLIR backend"),
+        ExprKind::Unsafe(_) => {
+            unimplemented!("Unsafe expressions not yet supported in MLIR backend")
+        }
+        ExprKind::Range(_, _) => {
+            unimplemented!("Range expressions not yet supported in MLIR backend")
+        }
     }
 }
 
@@ -232,8 +294,8 @@ fn create_float_constant<'ctx, 'a, 'b>(
 where
     'ctx: 'a,
 {
-    let float_type = Type::parse(ctx.context, type_str)
-        .expect(&format!("Failed to parse {} type", type_str));
+    let float_type =
+        Type::parse(ctx.context, type_str).expect(&format!("Failed to parse {} type", type_str));
     let value_attr = FloatAttribute::new(ctx.context, float_type, value.into());
     create_constant(ctx, value_attr)
 }
@@ -255,7 +317,8 @@ where
         desc::Lit::U64(value) => {
             // MLIR IntegerAttribute requires i64; reinterpret u64 bits as i64
             let int_type = IntegerType::new(ctx.context, 64).into();
-            let value_attr = IntegerAttribute::new(int_type, i64::from_ne_bytes(value.to_ne_bytes()));
+            let value_attr =
+                IntegerAttribute::new(int_type, i64::from_ne_bytes(value.to_ne_bytes()));
             Some(create_constant(ctx, value_attr))
         }
         desc::Lit::F32(value) => Some(create_float_constant(ctx, "f32", *value)),
@@ -293,5 +356,146 @@ where
         PlaceExprKind::Idx(_, _) => {
             unimplemented!("Index place expressions not yet supported in MLIR backend")
         }
+    }
+}
+
+/// Build an if expression (without else)
+fn build_if<'ctx, 'a, 'b>(
+    cond: &desc::Expr,
+    case_true: &desc::Expr,
+    ctx: &mut MlirContext<'ctx, 'a, 'b>,
+) -> Option<Value<'a, 'b>>
+where
+    'ctx: 'a,
+{
+    let location = ctx.location();
+
+    // Build the condition value
+    let cond_value = build_expr(cond, ctx)?;
+
+    // Create the then region with its block
+    let then_region = Region::new();
+    let then_block = then_region.append_block(Block::new(&[]));
+
+    // Save the current block and variables, switch to then block
+    let parent_block = ctx.current_block;
+    let parent_variables = ctx.variables.clone();
+    ctx.current_block = then_block;
+
+    // Build the true branch expression
+    let _true_value = build_expr(case_true, ctx);
+
+    // Add scf.yield to the then block (no value for if without else)
+    let yield_op = scf::r#yield(&[], location);
+    then_block.append_operation(yield_op);
+
+    // Create an empty else region with its block
+    let else_region = Region::new();
+    let else_block = else_region.append_block(Block::new(&[]));
+
+    // Add scf.yield to the else block
+    let yield_op = scf::r#yield(&[], location);
+    else_block.append_operation(yield_op);
+
+    // Restore the parent block and variables
+    ctx.variables = parent_variables;
+    ctx.current_block = parent_block;
+
+    // Build the scf.if operation without result types (if without else produces no value)
+    let if_op = OperationBuilder::new("scf.if", location)
+        .add_operands(&[cond_value])
+        .add_regions([then_region, else_region])
+        .build()
+        .expect("Failed to build scf.if operation");
+
+    // Append the if operation to the current block
+    ctx.current_block.append_operation(if_op);
+
+    // If without else doesn't produce a value
+    None
+}
+
+/// Build an if-else expression
+fn build_if_else<'ctx, 'a, 'b>(
+    cond: &desc::Expr,
+    case_true: &desc::Expr,
+    case_false: &desc::Expr,
+    ctx: &mut MlirContext<'ctx, 'a, 'b>,
+) -> Option<Value<'a, 'b>>
+where
+    'ctx: 'a,
+{
+    let location = ctx.location();
+
+    // Build the condition value
+    let cond_value = build_expr(cond, ctx)?;
+
+    // Create the then region with its block
+    let then_region = Region::new();
+    let then_block = then_region.append_block(Block::new(&[]));
+
+    // Save the current block and variables, switch to then block
+    let parent_block = ctx.current_block;
+    let parent_variables = ctx.variables.clone();
+    ctx.current_block = then_block;
+
+    // Build the true branch expression
+    let true_value = build_expr(case_true, ctx);
+
+    // Add scf.yield to the then block
+    if let Some(val) = true_value {
+        let yield_op = scf::r#yield(&[val], location);
+        then_block.append_operation(yield_op);
+    } else {
+        let yield_op = scf::r#yield(&[], location);
+        then_block.append_operation(yield_op);
+    }
+
+    // Create the else region with its block
+    let else_region = Region::new();
+    let else_block = else_region.append_block(Block::new(&[]));
+
+    // Restore variables and switch to else block
+    ctx.variables = parent_variables;
+    ctx.current_block = else_block;
+
+    // Build the false branch expression
+    let false_value = build_expr(case_false, ctx);
+
+    // Add scf.yield to the else block
+    if let Some(val) = false_value {
+        let yield_op = scf::r#yield(&[val], location);
+        else_block.append_operation(yield_op);
+    } else {
+        let yield_op = scf::r#yield(&[], location);
+        else_block.append_operation(yield_op);
+    }
+
+    // Restore the parent block
+    ctx.current_block = parent_block;
+
+    // Determine result types based on whether branches produce values
+    let result_types: Vec<Type> = if let Some(val) = true_value {
+        vec![val.r#type()]
+    } else {
+        vec![]
+    };
+
+    // Build the scf.if operation manually using OperationBuilder
+    let if_op = OperationBuilder::new("scf.if", location)
+        .add_operands(&[cond_value])
+        .add_results(&result_types)
+        .add_regions([then_region, else_region])
+        .build()
+        .expect("Failed to build scf.if operation");
+
+    // Append the if operation to the current block
+    let if_op_ref = ctx.current_block.append_operation(if_op);
+
+    // Return the result value if the if-else produces a value
+    if !result_types.is_empty() {
+        Some(if_op_ref.result(0).unwrap().into())
+    } else {
+        None
     }
 }
