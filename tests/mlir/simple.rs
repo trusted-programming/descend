@@ -50,3 +50,10 @@ fn if_else() -> Res {
     insta::assert_snapshot!(output);
     Ok(())
 }
+
+#[test]
+fn for_loop() -> Res {
+    let output = descend::compile("examples/simple/for_loop.desc", BACKEND)?.0;
+    insta::assert_snapshot!(output);
+    Ok(())
+}

@@ -1,0 +1,5 @@
+---
+source: tests/cuda/error_examples.rs
+expression: error
+---
+Aborting due to previous error.

@@ -213,8 +213,8 @@ where
         ExprKind::LetUninit(_, _, _) => {
             unimplemented!("Uninitialized let bindings not yet supported in MLIR backend")
         }
-        ExprKind::Assign(_, _) => {
-            unimplemented!("Assignment expressions not yet supported in MLIR backend")
+        ExprKind::Assign(place_expr, value_expr) => {
+            build_assign(place_expr, value_expr, ctx)
         }
         ExprKind::IdxAssign(_, _, _) => {
             unimplemented!("Index assignment not yet supported in MLIR backend")
@@ -233,8 +233,8 @@ where
         }
         ExprKind::If(cond, case_true) => build_if(cond, case_true, ctx),
         ExprKind::For(_, _, _) => unimplemented!("For loops not yet supported in MLIR backend"),
-        ExprKind::ForNat(_, _, _) => {
-            unimplemented!("For-nat loops not yet supported in MLIR backend")
+        ExprKind::ForNat(ident, range, body) => {
+            build_for_nat(ident, range, body, ctx)
         }
         ExprKind::While(_, _) => unimplemented!("While loops not yet supported in MLIR backend"),
         ExprKind::UnOp(_, _) => {
@@ -298,6 +298,58 @@ where
         Type::parse(ctx.context, type_str).expect(&format!("Failed to parse {} type", type_str));
     let value_attr = FloatAttribute::new(ctx.context, float_type, value.into());
     create_constant(ctx, value_attr)
+}
+
+/// Helper function to create an index constant
+fn create_index_constant<'ctx, 'a, 'b>(
+    ctx: &mut MlirContext<'ctx, 'a, 'b>,
+    value: impl Into<i64>,
+) -> Value<'a, 'b>
+where
+    'ctx: 'a,
+{
+    let index_type = Type::parse(ctx.context, "index").expect("Failed to parse index type");
+    let value_attr = IntegerAttribute::new(index_type, value.into());
+    create_constant(ctx, value_attr)
+}
+
+/// Build a natural number expression
+fn build_nat<'ctx, 'a, 'b>(
+    nat: &desc::Nat,
+    ctx: &mut MlirContext<'ctx, 'a, 'b>,
+) -> Option<Value<'a, 'b>>
+where
+    'ctx: 'a,
+{
+    use desc::{BinOpNat, Nat};
+    
+    match nat {
+        Nat::Lit(n) => Some(create_index_constant(ctx, *n as i64)),
+        Nat::Ident(ident) => ctx.variables.get(ident.name.as_ref()).copied(),
+        Nat::BinOp(op, lhs, rhs) => {
+            let lhs_value = build_nat(lhs, ctx)?;
+            let rhs_value = build_nat(rhs, ctx)?;
+            
+            let location = ctx.location();
+            let result_op = match op {
+                BinOpNat::Add => arith::addi(lhs_value, rhs_value, location),
+                BinOpNat::Sub => arith::subi(lhs_value, rhs_value, location),
+                BinOpNat::Mul => arith::muli(lhs_value, rhs_value, location),
+                BinOpNat::Div => arith::divsi(lhs_value, rhs_value, location),
+                BinOpNat::Mod => arith::remsi(lhs_value, rhs_value, location),
+            };
+            
+            let op_ref = ctx.current_block.append_operation(result_op);
+            Some(op_ref.result(0).unwrap().into())
+        }
+        Nat::ThreadIdx(_) | Nat::BlockIdx(_) | Nat::BlockDim(_) 
+        | Nat::WarpGrpIdx | Nat::WarpIdx | Nat::LaneIdx | Nat::GridIdx => {
+            unimplemented!("GPU-specific natural numbers not yet supported in MLIR backend")
+        }
+        Nat::App(_, _) => {
+            unimplemented!("Natural number function application not yet supported in MLIR backend")
+        }
+    }
 }
 
 /// Build a literal constant
@@ -497,5 +549,143 @@ where
         Some(if_op_ref.result(0).unwrap().into())
     } else {
         None
+    }
+}
+
+/// Build an assignment expression
+fn build_assign<'ctx, 'a, 'b>(
+    place_expr: &desc::PlaceExpr,
+    value_expr: &desc::Expr,
+    ctx: &mut MlirContext<'ctx, 'a, 'b>,
+) -> Option<Value<'a, 'b>>
+where
+    'ctx: 'a,
+{
+    use desc::PlaceExprKind;
+    
+    // Evaluate the right-hand side value
+    let value = build_expr(value_expr, ctx)?;
+    
+    // For now, only support simple identifier assignments
+    match &place_expr.pl_expr {
+        PlaceExprKind::Ident(ident) => {
+            // In SSA form, "assignment" is just rebinding the variable name to a new SSA value
+            ctx.variables.insert(ident.name.to_string(), value);
+            // Assignment expressions don't produce a value
+            None
+        }
+        _ => {
+            unimplemented!("Only simple identifier assignments are supported in MLIR backend")
+        }
+    }
+}
+
+/// Build a for-nat loop
+fn build_for_nat<'ctx, 'a, 'b>(
+    ident: &desc::Ident,
+    range: &desc::NatRange,
+    body: &desc::Expr,
+    ctx: &mut MlirContext<'ctx, 'a, 'b>,
+) -> Option<Value<'a, 'b>>
+where
+    'ctx: 'a,
+{
+    use desc::NatRange;
+    
+    let location = ctx.location();
+    
+    // Handle only Simple range for now
+    match range {
+        NatRange::Simple { lower, upper } => {
+            // Build lower and upper bound values
+            let lower_value = build_nat(lower, ctx)?;
+            let upper_value = build_nat(upper, ctx)?;
+            
+            // Create step constant (always 1 for simple range)
+            let step_value = create_index_constant(ctx, 1);
+            
+            // Collect current variable values that will be loop-carried (iter_args)
+            // We need to pass them as operands and receive updated values after the loop
+            let parent_variables = ctx.variables.clone();
+            let iter_arg_names: Vec<String> = parent_variables.keys().cloned().collect();
+            let iter_arg_values: Vec<Value> = iter_arg_names.iter()
+                .filter_map(|name| parent_variables.get(name).copied())
+                .collect();
+            let iter_arg_types: Vec<Type> = iter_arg_values.iter()
+                .map(|v| v.r#type())
+                .collect();
+            
+            // Create the loop body region with block arguments:
+            // - First argument: induction variable (index type)
+            // - Remaining arguments: iter_args (loop-carried values)
+            let index_type = Type::parse(ctx.context, "index").expect("Failed to parse index type");
+            let mut block_arg_types: Vec<(Type, Location)> = vec![(index_type, location)];
+            block_arg_types.extend(iter_arg_types.iter().map(|t| (*t, location)));
+            
+            let body_region = Region::new();
+            let body_block = body_region.append_block(Block::new(&block_arg_types));
+            
+            // Save the current block, switch to body block
+            let parent_block = ctx.current_block;
+            ctx.current_block = body_block;
+            
+            // Get the induction variable (first block argument)
+            let induction_var = body_block.argument(0).unwrap().into();
+            ctx.variables.insert(ident.name.to_string(), induction_var);
+            
+            // Map iter_arg names to their block arguments (starting from index 1)
+            for (i, name) in iter_arg_names.iter().enumerate() {
+                let arg_value = body_block.argument(i + 1).unwrap().into();
+                ctx.variables.insert(name.clone(), arg_value);
+            }
+            
+            // Build the loop body expression
+            let _body_value = build_expr(body, ctx);
+            
+            // Collect the updated values to yield
+            let yield_values: Vec<Value> = iter_arg_names.iter()
+                .filter_map(|name| ctx.variables.get(name).copied())
+                .collect();
+            
+            // Add scf.yield with the updated iter_args
+            let yield_op = scf::r#yield(&yield_values, location);
+            body_block.append_operation(yield_op);
+            
+            // Restore the parent block
+            ctx.current_block = parent_block;
+            
+            // Build the scf.for operation with iter_args
+            let mut for_operands = vec![lower_value, upper_value, step_value];
+            for_operands.extend(iter_arg_values);
+            
+            let for_op = OperationBuilder::new("scf.for", location)
+                .add_operands(&for_operands)
+                .add_results(&iter_arg_types)
+                .add_regions([body_region])
+                .build()
+                .expect("Failed to build scf.for operation");
+            
+            // Append the for operation to the current block
+            let for_op_ref = ctx.current_block.append_operation(for_op);
+            
+            // Update variables with the final values from the loop
+            for (i, name) in iter_arg_names.iter().enumerate() {
+                if let Ok(result) = for_op_ref.result(i) {
+                    ctx.variables.insert(name.clone(), result.into());
+                }
+            }
+            
+            // Remove the loop induction variable
+            ctx.variables.remove(&ident.name.to_string());
+            
+            // ForNat loops don't produce a value themselves
+            None
+        }
+        NatRange::Halved { .. } => {
+            unimplemented!("Halved range not yet supported in MLIR backend")
+        }
+        NatRange::Doubled { .. } => {
+            unimplemented!("Doubled range not yet supported in MLIR backend")
+        }
     }
 }
