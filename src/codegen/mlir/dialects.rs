@@ -14,7 +14,7 @@ melior::dialect! {
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/Annotation/IR/AnnotationBase.td",
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/Annotation/IR/AnnotationOps.td",
     ],
-    include_directories: ["/root/dev/descend/AscendNPU-IR/bishengir/include"],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
 }
 
 melior::dialect! {
@@ -22,7 +22,7 @@ melior::dialect! {
     files: [
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HACC/IR/HACCBase.td",
     ],
-    include_directories: ["/root/dev/descend/AscendNPU-IR/bishengir/include"],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
 }
 
 melior::dialect! {
@@ -34,7 +34,7 @@ melior::dialect! {
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionOps.td",
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HFusion/IR/HFusionTraits.td",
     ],
-    include_directories: ["/root/dev/descend/AscendNPU-IR/bishengir/include"],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
 }
 
 melior::dialect! {
@@ -51,7 +51,7 @@ melior::dialect! {
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HIVM/IR/HIVMTraits.td",
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HIVM/IR/HIVMVectorOps.td",
     ],
-    include_directories: ["/root/dev/descend/AscendNPU-IR/bishengir/include"],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
 }
 
 melior::dialect! {
@@ -60,7 +60,7 @@ melior::dialect! {
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/MathExt/IR/MathExtBase.td",
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/MathExt/IR/MathExtOps.td",
     ],
-    include_directories: ["/root/dev/descend/AscendNPU-IR/bishengir/include"],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
 }
 
 melior::dialect! {
@@ -69,7 +69,7 @@ melior::dialect! {
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/MemRefExt/IR/MemRefExtBase.td",
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/MemRefExt/IR/MemRefExtOps.td",
     ],
-    include_directories: ["/root/dev/descend/AscendNPU-IR/bishengir/include"],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
 }
 
 melior::dialect! {
@@ -78,5 +78,5 @@ melior::dialect! {
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/Symbol/IR/SymbolBase.td",
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/Symbol/IR/SymbolOps.td",
     ],
-    include_directories: ["/root/dev/descend/AscendNPU-IR/bishengir/include"],
+    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
 }

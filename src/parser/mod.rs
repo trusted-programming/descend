@@ -12,7 +12,7 @@ pub use source::*;
 
 use crate::ast::visit_mut::VisitMut;
 
-pub fn parse<'a>(source: &'a SourceCode<'a>) -> Result<CompilUnit, ErrorReported> {
+pub fn parse<'a>(source: &'a SourceCode<'a>) -> Result<CompilUnit<'a>, ErrorReported> {
     let parser = Parser::new(source);
     let mut items = parser.parse().map_err(|err| err.emit())?;
     // TODO refactor to not require unnecessary copying out of items

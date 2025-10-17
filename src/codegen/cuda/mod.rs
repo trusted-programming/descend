@@ -9,6 +9,7 @@ use cu_ast as cu;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::ptr::addr_of;
 
 pub(crate) static WARP_IDENT: &str = "$warp";
 
@@ -2353,11 +2354,11 @@ static mut LABEL_COUNTER: AtomicI32 = AtomicI32::new(0);
 static mut IDX_CHECK_COUNTER: AtomicI32 = AtomicI32::new(0);
 
 fn incr_idx_check_counter() -> i32 {
-    incr_atomic_counter(unsafe { &IDX_CHECK_COUNTER })
+    incr_atomic_counter(unsafe { &*addr_of!(IDX_CHECK_COUNTER) })
 }
 
 fn incr_label_counter() -> i32 {
-    incr_atomic_counter(unsafe { &LABEL_COUNTER })
+    incr_atomic_counter(unsafe { &*addr_of!(LABEL_COUNTER) })
 }
 
 fn incr_atomic_counter(counter: &AtomicI32) -> i32 {

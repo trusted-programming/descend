@@ -1270,7 +1270,10 @@ impl DataTy {
             Tuple(elem_tys) => elem_tys.iter().any(|ty| ty.non_copyable()),
             Array(_, _) => false,
             RawPtr(_) => true,
-            Range => true,
+            Struct(struct_decl) => struct_decl
+                .fields
+                .iter()
+                .any(|(_, dty)| dty.non_copyable()),
             Dead(_) => panic!(
                 "This case is not expected to mean anything.\
                 The type is dead. There is nothign we can do with it."
