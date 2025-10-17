@@ -4,8 +4,16 @@ version = "0.1.0"
 authors = ["Köpcke <bastian.koepcke@uni-muenster.de>"]
 edition = "2021"
 
+# Allow specific lints globally
+[package.metadata.clippy]
+unused_variables = "allow"
+dead_code = "allow"
+unused_imports = "allow"
+unreachable_code = "allow"
+
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+insta = "1.43.2"
 melior = { version = "0.25", features = ["ods-dialects"] }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

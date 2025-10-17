@@ -9,7 +9,7 @@ use crate::ast::{
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicI32, Ordering};
 
-static mut COUNTER: AtomicI32 = AtomicI32::new(0);
+static COUNTER: AtomicI32 = AtomicI32::new(0);
 
 pub(crate) fn fresh_ident<F, R>(name: &str, ident_constr: F) -> R
 where
@@ -20,10 +20,7 @@ where
 
 pub(crate) fn fresh_name(name: &str) -> String {
     let prefix = format!("${}", name);
-    let i;
-    unsafe {
-        i = COUNTER.fetch_add(1, Ordering::SeqCst);
-    }
+    let i = COUNTER.fetch_add(1, Ordering::SeqCst);
     format!("{}_{}", prefix, i)
 }
 
@@ -199,7 +196,7 @@ impl VisitMut for SubstIdentsKinded<'_> {
             visit_param_sig,
             &mut fn_ty.param_sigs
         );
-        for ident_exec in &mut fn_ty.generic_exec {
+        if let Some(ident_exec) = &mut fn_ty.generic_exec {
             visitor_subst_generic_ident.visit_exec_ty(&mut ident_exec.ty);
         }
         visitor_subst_generic_ident.visit_exec_expr(&mut fn_ty.exec);
@@ -234,7 +231,7 @@ impl VisitMut for SubstIdentsKinded<'_> {
             &mut fun_def.param_decls
         );
         subst_fun_free_kind_idents.visit_dty(&mut fun_def.ret_dty);
-        for ident_exec in &mut fun_def.generic_exec {
+        if let Some(ident_exec) = &mut fun_def.generic_exec {
             subst_fun_free_kind_idents.visit_ident_exec(ident_exec);
         }
         subst_fun_free_kind_idents.visit_exec_expr(&mut fun_def.exec);

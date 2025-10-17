@@ -281,8 +281,7 @@ The MLIR backend targets Huawei Ascend NPUs through AscendNPU-IR:
 
 - [x] Type system conversion
 - [x] Function signature generation
-- [ ] Expression translation to standard MLIR dialects
-- [ ] Control flow (if/else, loops)
+- [x] Control flow (if/else, loops)
 - [ ] Memory operations (alloc, load, store)
 
 ###### Phase 2: Ascend-Specific Lowering

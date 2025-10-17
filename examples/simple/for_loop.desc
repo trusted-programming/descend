@@ -1,0 +1,8 @@
+fn main() -[t: cpu.thread]-> i32 {
+    let mut sum = 0;
+    for i in 0..10 {
+        sum = sum + 1
+    };
+    sum
+}
+

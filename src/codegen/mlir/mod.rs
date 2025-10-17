@@ -23,13 +23,28 @@ pub fn gen(comp_unit: &CompilUnit, _idx_checks: bool) -> String {
         builder.build_item(item);
     }
 
-    // FIXME: temporary fix for verification failure
-    if !builder.module().as_operation().verify() {
-        panic!("MLIR module verification failed");
-    };
-
     // Dump the module to string
     builder.module().as_operation().to_string()
+}
+
+pub fn gen_checked(comp_unit: &CompilUnit, _idx_checks: bool) -> Result<String, String> {
+    let context = create_context();
+    let location = Location::unknown(&context);
+    let module = Module::new(location);
+    let mut builder = MlirBuilder::new(&context, module);
+
+    // Build each item in the compilation unit
+    for item in &comp_unit.items {
+        builder.build_item(item);
+    }
+
+    // Verify the module
+    if !builder.module().as_operation().verify() {
+        return Err("MLIR module verification failed".to_string());
+    }
+
+    // Dump the module to string
+    Ok(builder.module().as_operation().to_string())
 }
 
 pub fn create_context() -> Context {

@@ -1,5 +1,5 @@
 use clap::{Parser, ValueEnum};
-use descend::{self, compile};
+use descend;
 use std::fs;
 use std::path::PathBuf;
 
@@ -21,6 +21,10 @@ struct Args {
     /// Print Ast
     #[arg(short, long)]
     print_ast: bool,
+
+    /// Skip MLIR verification checks
+    #[arg(long)]
+    no_checks: bool,
 }
 
 /// Backend selection passed via CLI
@@ -48,11 +52,22 @@ fn main() {
     let output_dir = &args.output_dir;
 
     // Compile using Descend
-    let (code_string, ast_string) = match compile(&input_path.to_string_lossy(), backend) {
-        Ok(output) => output,
-        Err(e) => {
-            eprintln!("Compilation failed: {:?}", e);
-            std::process::exit(1);
+    let (code_string, ast_string) = if args.no_checks {
+        let code_string = match descend::compile_unchecked(&input_path.to_string_lossy(), backend) {
+            Ok(output) => output,
+            Err(e) => {
+                eprintln!("Compilation failed: {:?}", e);
+                std::process::exit(1);
+            }
+        };
+        (code_string, String::new())
+    } else {
+        match descend::compile(&input_path.to_string_lossy(), backend) {
+            Ok(output) => output,
+            Err(e) => {
+                eprintln!("Compilation failed: {:?}", e);
+                std::process::exit(1);
+            }
         }
     };
 

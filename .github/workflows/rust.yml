@@ -6,8 +6,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-A warnings"
-  LLVM_CONFIG: /usr/bin/llvm-config-20
   
 jobs:
   build-and-test:

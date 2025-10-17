@@ -33,9 +33,6 @@ Thumbs.db
 *.ll
 *.bc
 
-# Cargo configuration (may contain local settings)
-.cargo/config.toml
-
 # Insta snapshot review files (actual .snap files should be committed)
 *.snap.new
 
