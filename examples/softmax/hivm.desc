@@ -1,0 +1,63 @@
+fn main() -[t: cpu.thread]-> () <'a>{
+    let input: &'a uniq cpu.mem [f32; 64*1024] = unsafe _;
+    softmax::<64*1024>(input)
+}
+
+fn softmax<n: nat, r: prv>(
+    h_input: &r uniq cpu.mem [f32; n]
+) -[t: cpu.thread]-> () <'a> {
+    let mut gpu = gpu_device(0);
+    
+    // Copy input to GPU
+    let mut input = gpu_alloc_copy(&uniq gpu, &shrd *h_input);
+    
+    // Step 1: Find maximum value for numerical stability
+    let max_val = hivm_hir_vreduce_max(&shrd input);
+    
+    // Step 2: Subtract max from each element (x - max)
+    hivm_hir_vsub(&uniq input, max_val);
+    
+    // Step 3: Compute exp(x - max) for each element
+    hivm_vexp(&uniq input);
+    
+    // Step 4: Compute sum of exp values on GPU
+    let exp_sum = hivm_hir_vreduce_add(&shrd input);
+
+    // Step 5: Normalize by dividing each element by the sum
+    hivm_hir_vdiv(&uniq input, exp_sum);
+    
+    // Copy final result back to host
+    copy_to_host(&shrd input, h_input)
+}
+
+
+// HIVM Dialect Placeholder Functions
+// These are temporary declarations for compilation testing
+// TODO: Replace with actual HIVM dialect operations when implemented
+
+// inplace changing
+fn hivm_vexp<n: nat, r: prv>(
+    input: &r uniq gpu.global [f32; n]
+) -[t: any]-> ();
+
+// return f32 result
+fn hivm_hir_vreduce_add<n: nat, r1: prv>(
+    input: &r1 shrd gpu.global [f32; n]
+) -[t: any]-> f32;
+
+// return f32 result - max reduction
+fn hivm_hir_vreduce_max<n: nat, r1: prv>(
+    input: &r1 shrd gpu.global [f32; n]
+) -[t: any]-> f32;
+
+// inplace element-wise subtraction (vector-scalar)
+fn hivm_hir_vsub<n: nat, r: prv>(
+    input: &r uniq gpu.global [f32; n],
+    scalar: f32
+) -[t: any]-> ();
+
+// inplace element-wise division (vector-scalar)
+fn hivm_hir_vdiv<n: nat, r: prv>(
+    input: &r uniq gpu.global [f32; n],
+    scalar: f32
+) -[t: any]-> ();
