@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+      "*.desc": "rust"
+    },
+    "rust-analyzer.files.exclude": ["examples"]
+}

@@ -48,15 +48,13 @@ pub fn ty_check(compil_unit: &mut CompilUnit) -> Result<(), ErrorReported> {
     if let Some(mut main_fun) = gl_ctx.pop_fun_def("main") {
         if let Err(err) = ty_check_global_fun_def(&mut gl_ctx, &mut nat_ctx, &mut main_fun) {
             err.emit(compil_unit.source);
-            Err(ErrorReported)
+            return Err(ErrorReported);
         } else {
             gl_ctx.push_fun_checked_under_nats(main_fun, Box::from(vec![]));
-            Ok(())
         }
-    } else {
-        TyError::MissingMain.emit(compil_unit.source);
-        Err(ErrorReported)
     }
+    // Main function is optional - compilation succeeds whether it exists or not
+    Ok(())
 }
 
 struct ExprTyCtx<'src, 'compil, 'ctxt> {

@@ -1,0 +1,7 @@
+fn helper() -[t: cpu.thread]-> i32 {
+    42
+}
+
+fn another_function(x: i32) -[t: cpu.thread]-> i32 {
+    x + helper()
+}
