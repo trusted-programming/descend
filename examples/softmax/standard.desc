@@ -1,0 +1,66 @@
+fn main() -[t: cpu.thread]-> () <'a>{
+    let input: &'a uniq cpu.mem [f32; 64*1024] = unsafe _;
+    softmax::<64*1024>(input)
+}
+
+fn softmax<n: nat, r: prv>(
+    h_input: &r uniq cpu.mem [f32; n]
+) -[t: cpu.thread]-> () <'a> {
+    let mut gpu = gpu_device(0);
+    
+    // Copy input to GPU
+    let mut input = gpu_alloc_copy(&uniq gpu, &shrd *h_input);
+    
+
+    // TODO: Step 1: Find maximum value for numerical stability
+    // let max = gpu_max::<<<X<64>, X<1024>>>>(&uniq input);
+    // Use shared memory to load data, threads compare and reduce values in parallel,
+    // keeping the maximum via iterative max operations.
+    
+
+    // Step 2: Compute exp(x - max) for each element
+    // FIXME: Use parallel reduction with shared memory, compute exp values per thread, and sum via reduction
+    gpu_exp_max::<<<X<64>, X<1024>>>>(&uniq input, max);
+    
+    // TODO: Step 3: Compute sum of exp values on GPU
+    // Use parallel reduction with shared memory, compute exp values per thread, and sum via reduction
+
+    // Step 4: Normalize by dividing each element by the sum
+    gpu_normalize::<<<X<64>, X<1024>>>>(&uniq input, exp_sum);
+    
+    // Copy final result back to host
+    copy_to_host(&shrd input, h_input)
+}
+
+
+
+fn gpu_exp_max<n: nat, r: prv>(
+    input: &r uniq gpu.global [f32; n],
+    max: f32
+) -[grid: gpu.grid<X<64>, X<1024>>]-> () {
+    sched block in grid {
+        sched thread in block {
+            let elem = &uniq (*input).to_view.grp::<1024>[[block]][[thread]];
+            *elem = exp(*elem - max)
+        }
+    }
+}
+
+fn gpu_normalize<n: nat, r: prv>(
+    input: &r uniq gpu.global [f32; n],
+    sum: f32
+) -[grid: gpu.grid<X<64>, X<1024>>]-> () {
+    sched block in grid {
+        sched thread in block {
+            let elem = &uniq (*input).to_view.grp::<1024>[[block]][[thread]];
+            // Since sum is already a scalar f32 passed as a parameter, 
+            // and we're doing element-wise division, the broadcast is implicit
+            *elem = *elem / sum
+        }
+    }
+}
+
+// External math function declaration
+fn exp(v: f32) -[t: any]-> f32;
+
+fn maxf(a: f32, bf32: f32) -[t: any]-> f32;
