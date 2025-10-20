@@ -47,10 +47,10 @@ where
     'ctx: 'a,
 {
     use desc::PlaceExprKind;
-    
+
     // Evaluate the right-hand side value
     let value = build_expr(value_expr, ctx)?;
-    
+
     // For now, only support simple identifier assignments
     match &place_expr.pl_expr {
         PlaceExprKind::Ident(ident) => {

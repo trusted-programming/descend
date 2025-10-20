@@ -1,10 +1,4 @@
-use melior::{
-    ir::{
-        attribute::IntegerAttribute,
-        r#type::IntegerType,
-        Value,
-    },
-};
+use melior::ir::{attribute::IntegerAttribute, r#type::IntegerType, Value};
 
 use super::context::{create_constant, create_float_constant, create_int_constant, MlirContext};
 use crate::ast as desc;

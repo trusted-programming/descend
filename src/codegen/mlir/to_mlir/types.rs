@@ -40,7 +40,7 @@ impl ToMlir for DataTy {
                 ScalarTy::F32 => "f32",
                 ScalarTy::F64 => "f64",
                 ScalarTy::Bool => "i1",
-                ScalarTy::Gpu => panic!("GPU type not supported in MLIR conversion"),
+                ScalarTy::Gpu => "i32", // this will be ignored in the MLIR backend
             }
             .to_string(),
             DataTyKind::Atomic(atomic_ty) => match atomic_ty {

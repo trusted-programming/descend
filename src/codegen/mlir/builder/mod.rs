@@ -1,11 +1,11 @@
 pub mod context;
+pub mod control_flow;
 pub mod expr;
 pub mod literal;
-pub mod place;
-pub mod control_flow;
 pub mod loops;
-pub mod ops;
 pub mod nat;
+pub mod ops;
+pub mod place;
 
 use melior::{
     dialect::func,

@@ -1,11 +1,11 @@
 use melior::ir::Value;
 
 use super::context::MlirContext;
-use super::literal::build_literal;
-use super::place::{build_assign, build_place_expr};
 use super::control_flow::{build_if, build_if_else};
+use super::literal::build_literal;
 use super::loops::build_for_nat;
 use super::ops::build_binary_operation;
+use super::place::{build_assign, build_place_expr};
 use crate::ast as desc;
 use desc::Pattern;
 
@@ -71,14 +71,34 @@ where
         ExprKind::LetUninit(_, _, _) => {
             unimplemented!("Uninitialized let bindings not yet supported in MLIR backend")
         }
-        ExprKind::Assign(place_expr, value_expr) => {
-            build_assign(place_expr, value_expr, ctx)
-        }
+        ExprKind::Assign(place_expr, value_expr) => build_assign(place_expr, value_expr, ctx),
         ExprKind::IdxAssign(_, _, _) => {
             unimplemented!("Index assignment not yet supported in MLIR backend")
         }
-        ExprKind::App(_, _, _) => {
-            unimplemented!("Function application not yet supported in MLIR backend")
+        ExprKind::App(func_name, _kinded_args, value_args) => {
+            // Handle intrinsic functions that should be ignored in MLIR
+            match func_name.name.as_ref() {
+                "gpu_device" => {
+                    // Ignore gpu_device calls - device context is implicit in HIVM
+                    None
+                }
+                "gpu_alloc_copy"
+                | "copy_to_host"
+                | "hivm_vexp"
+                | "hivm_hir_vreduce_max"
+                | "hivm_hir_vsub"
+                | "hivm_hir_vreduce_add"
+                | "hivm_hir_vdiv" => {
+                    // Ignore HIVM placeholder functions - these will be replaced with actual HIVM operations
+                    None
+                }
+                _ => {
+                    unimplemented!(
+                        "Function application for '{}' not yet supported in MLIR backend",
+                        func_name.name
+                    )
+                }
+            }
         }
         ExprKind::DepApp(_, _) => {
             unimplemented!("Dependent application not yet supported in MLIR backend")
@@ -91,9 +111,7 @@ where
         }
         ExprKind::If(cond, case_true) => build_if(cond, case_true, ctx),
         ExprKind::For(_, _, _) => unimplemented!("For loops not yet supported in MLIR backend"),
-        ExprKind::ForNat(ident, range, body) => {
-            build_for_nat(ident, range, body, ctx)
-        }
+        ExprKind::ForNat(ident, range, body) => build_for_nat(ident, range, body, ctx),
         ExprKind::While(_, _) => unimplemented!("While loops not yet supported in MLIR backend"),
         ExprKind::UnOp(_, _) => {
             unimplemented!("Unary operations not yet supported in MLIR backend")

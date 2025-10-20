@@ -8,8 +8,8 @@ use crate::ty_check;
 use cu_ast as cu;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::ptr::addr_of;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 pub(crate) static WARP_IDENT: &str = "$warp";
 

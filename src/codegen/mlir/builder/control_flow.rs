@@ -1,11 +1,8 @@
-use melior::{
-    ir::{
-        operation::OperationBuilder,
-        Block, BlockLike, Region, RegionLike, Type, Value, ValueLike,
-    },
+use melior::ir::{
+    operation::OperationBuilder, Block, BlockLike, Region, RegionLike, Type, Value, ValueLike,
 };
 
-use super::context::{MlirContext, append_yield};
+use super::context::{append_yield, MlirContext};
 use super::expr::build_expr;
 use crate::ast as desc;
 
@@ -20,7 +17,7 @@ where
     F: FnMut(&desc::Expr, &mut MlirContext<'ctx, 'a, 'b>) -> Option<Value<'a, 'b>>,
 {
     let location = ctx.location();
-    
+
     // Create the region with its block
     let region = Region::new();
     let block = region.append_block(Block::new(&[]));

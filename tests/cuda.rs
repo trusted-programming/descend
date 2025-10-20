@@ -10,7 +10,6 @@ mod error_examples;
 #[path = "cuda/simple.rs"]
 mod simple;
 
-
 #[path = "cuda/softmax.rs"]
 mod softmax;
 
