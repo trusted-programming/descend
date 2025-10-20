@@ -3,6 +3,7 @@ use melior::{
     ir::{
         attribute::{FloatAttribute, IntegerAttribute},
         r#type::IntegerType,
+        operation::OperationBuilder,
         BlockLike, BlockRef, Location, Type, Value,
     },
     Context,
@@ -115,4 +116,61 @@ pub fn append_yield<'a, 'b>(
         scf::r#yield(&[], location)
     };
     block.append_operation(yield_op);
+}
+
+/// Allocate a rank-0 memref with the given element type using memref.alloca
+pub fn alloca_rank0_memref<'ctx, 'a, 'b>(
+    ctx: &mut MlirContext<'ctx, 'a, 'b>,
+    elem_type: Type<'ctx>,
+) -> Value<'a, 'b>
+where
+    'ctx: 'a,
+{
+    let location = ctx.location();
+    // Build memref<elem_type> type string for rank-0 memref
+    let memref_ty_str = format!("memref<{}>", elem_type.to_string());
+    let memref_ty = Type::parse(ctx.context, &memref_ty_str)
+        .expect("Failed to parse rank-0 memref type");
+
+    let op = OperationBuilder::new("memref.alloca", location)
+        .add_results(&[memref_ty])
+        .build()
+        .expect("Failed to build memref.alloca");
+    let op_ref = ctx.current_block.append_operation(op);
+    op_ref.result(0).unwrap().into()
+}
+
+/// Load from a rank-0 memref using memref.load
+pub fn memref_load_rank0<'ctx, 'a, 'b>(
+    ctx: &mut MlirContext<'ctx, 'a, 'b>,
+    memref: Value<'a, 'b>,
+    elem_type: Type<'ctx>,
+) -> Value<'a, 'b>
+where
+    'ctx: 'a,
+{
+    let location = ctx.location();
+    let op = OperationBuilder::new("memref.load", location)
+        .add_operands(&[memref])
+        .add_results(&[elem_type])
+        .build()
+        .expect("Failed to build memref.load");
+    let op_ref = ctx.current_block.append_operation(op);
+    op_ref.result(0).unwrap().into()
+}
+
+/// Store to a rank-0 memref using memref.store
+pub fn memref_store_rank0<'ctx, 'a, 'b>(
+    ctx: &mut MlirContext<'ctx, 'a, 'b>,
+    value: Value<'a, 'b>,
+    memref: Value<'a, 'b>,
+) where
+    'ctx: 'a,
+{
+    let location = ctx.location();
+    let op = OperationBuilder::new("memref.store", location)
+        .add_operands(&[value, memref])
+        .build()
+        .expect("Failed to build memref.store");
+    ctx.current_block.append_operation(op);
 }

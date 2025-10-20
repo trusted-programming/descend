@@ -71,3 +71,10 @@ fn func_params() -> Res {
     insta::assert_snapshot!(output);
     Ok(())
 }
+
+#[test]
+fn ref_deref() -> Res {
+    let output = descend::compile("examples/simple/ref_deref.desc", BACKEND)?.0;
+    insta::assert_snapshot!(output);
+    Ok(())
+}

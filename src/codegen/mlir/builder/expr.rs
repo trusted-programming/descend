@@ -65,8 +65,29 @@ where
         }
         ExprKind::Array(_) => unimplemented!("Array expressions not yet supported in MLIR backend"),
         ExprKind::Tuple(_) => unimplemented!("Tuple expressions not yet supported in MLIR backend"),
-        ExprKind::Ref(_, _, _) => {
-            unimplemented!("Reference expressions not yet supported in MLIR backend")
+        ExprKind::Ref(_prv, _own, place_expr) => {
+            // Minimal support: take address of an identifier holding an i32 value.
+            // Allocate a rank-0 memref<i32>, store current value, and return the memref value.
+            use super::context::{alloca_rank0_memref, memref_store_rank0};
+            use desc::PlaceExprKind;
+
+            match &place_expr.pl_expr {
+                PlaceExprKind::Ident(ident) => {
+                    let val = ctx
+                        .variables
+                        .get(ident.name.as_ref())
+                        .copied()
+                        .expect("address-of of unknown identifier");
+                    let elem_ty = melior::ir::Type::parse(ctx.context, "i32")
+                        .expect("failed to parse i32 type");
+                    let mem = alloca_rank0_memref(ctx, elem_ty);
+                    memref_store_rank0(ctx, val, mem);
+                    Some(mem)
+                }
+                _ => unimplemented!(
+                    "Reference to non-identifier places not yet supported in MLIR backend"
+                ),
+            }
         }
         ExprKind::LetUninit(_, _, _) => {
             unimplemented!("Uninitialized let bindings not yet supported in MLIR backend")
