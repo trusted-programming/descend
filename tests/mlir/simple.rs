@@ -78,3 +78,10 @@ fn ref_deref() -> Res {
     insta::assert_snapshot!(output);
     Ok(())
 }
+
+#[test]
+fn cpu_memory_allocation() -> Res {
+    let output = descend::compile("examples/simple/cpu_memory_allocation.desc", BACKEND)?.0;
+    insta::assert_snapshot!(output);
+    Ok(())
+}

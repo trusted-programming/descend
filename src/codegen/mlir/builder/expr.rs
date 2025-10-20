@@ -6,6 +6,7 @@ use super::literal::build_literal;
 use super::loops::build_for_nat;
 use super::ops::build_binary_operation;
 use super::place::{build_assign, build_place_expr};
+use crate::codegen::mlir::to_mlir::types::ToMlir;
 use crate::ast as desc;
 use desc::Pattern;
 
@@ -35,9 +36,27 @@ where
             let result_value = build_binary_operation(lhs_value, rhs_value, *op, ctx);
             Some(result_value)
         }
-        ExprKind::Let(pattern, _ty, value_expr) => {
+        ExprKind::Let(pattern, ty, value_expr) => {
             // Evaluate the value expression
-            let value = build_expr(value_expr, ctx)?;
+            let value = match build_expr(value_expr, ctx) {
+                Some(v) => v,
+                None => {
+                    // If the value expression returns None (e.g., from Hole), 
+                    // allocate memory based on the type annotation
+                    match ty {
+                        Some(ty) => {
+                            // Convert the type to MLIR and allocate memory
+                            let mlir_type = ty.to_mlir(ctx.context);
+                            use super::context::alloca_memref;
+                            alloca_memref(ctx, mlir_type)
+                        }
+                        None => {
+                            // No type annotation, can't allocate
+                            return None;
+                        }
+                    }
+                }
+            };
 
             // Bind the variable name to the SSA value
             match pattern {
@@ -150,8 +169,9 @@ where
             unimplemented!("Schedule expressions not yet supported in MLIR backend")
         }
         ExprKind::Sync(_) => unimplemented!("Sync expressions not yet supported in MLIR backend"),
-        ExprKind::Unsafe(_) => {
-            unimplemented!("Unsafe expressions not yet supported in MLIR backend")
+        ExprKind::Unsafe(expr) => {
+            // Unsafe expressions are just passthrough - recursively build the inner expression
+            build_expr(expr, ctx)
         }
         ExprKind::Range(_, _) => {
             unimplemented!("Range expressions not yet supported in MLIR backend")

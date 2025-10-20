@@ -118,6 +118,23 @@ pub fn append_yield<'a, 'b>(
     block.append_operation(yield_op);
 }
 
+/// Allocate a memref with the given type using memref.alloca
+pub fn alloca_memref<'ctx, 'a, 'b>(
+    ctx: &mut MlirContext<'ctx, 'a, 'b>,
+    memref_type: Type<'ctx>,
+) -> Value<'a, 'b>
+where
+    'ctx: 'a,
+{
+    let location = ctx.location();
+    let op = OperationBuilder::new("memref.alloca", location)
+        .add_results(&[memref_type])
+        .build()
+        .expect("Failed to build memref.alloca");
+    let op_ref = ctx.current_block.append_operation(op);
+    op_ref.result(0).unwrap().into()
+}
+
 /// Allocate a rank-0 memref with the given element type using memref.alloca
 pub fn alloca_rank0_memref<'ctx, 'a, 'b>(
     ctx: &mut MlirContext<'ctx, 'a, 'b>,
