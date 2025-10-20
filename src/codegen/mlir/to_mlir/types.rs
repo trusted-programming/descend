@@ -76,8 +76,62 @@ impl ToMlir for DataTy {
             DataTyKind::At(_, _) => {
                 unimplemented!("At types (memory location) not yet supported in MLIR conversion")
             }
-            DataTyKind::Ref(_) => {
-                unimplemented!("Reference types not yet supported in MLIR conversion")
+            DataTyKind::Ref(ref_dty) => {
+                // Convert the inner DataTy to MLIR based on its kind
+                match &ref_dty.dty.dty {
+                    DataTyKind::Scalar(scalar_ty) => {
+                        // Scalar reference -> rank-0 memref
+                        match scalar_ty {
+                            ScalarTy::Unit => "memref<none>",
+                            ScalarTy::U8 => "memref<i8>",
+                            ScalarTy::U32 => "memref<i32>",
+                            ScalarTy::U64 => "memref<i64>",
+                            ScalarTy::I32 => "memref<i32>",
+                            ScalarTy::I64 => "memref<i64>",
+                            ScalarTy::F32 => "memref<f32>",
+                            ScalarTy::F64 => "memref<f64>",
+                            ScalarTy::Bool => "memref<i1>",
+                            ScalarTy::Gpu => "memref<i32>",
+                        }
+                        .to_string()
+                    }
+                    DataTyKind::Array(elem_ty, size) => {
+                        // Array reference -> memref with dimensions
+                        let elem_type_str = elem_ty.to_mlir(context).to_string();
+                        let dim = nat_to_dimension(size);
+                        format!("memref<{}x{}>", dim, elem_type_str)
+                    }
+                    DataTyKind::ArrayShape(elem_ty, size) => {
+                        // ArrayShape reference -> memref with dimensions
+                        let elem_type_str = elem_ty.to_mlir(context).to_string();
+                        let dim = nat_to_dimension(size);
+                        format!("memref<{}x{}>", dim, elem_type_str)
+                    }
+                    DataTyKind::Tuple(_) => {
+                        unimplemented!("Tuple references not yet supported in MLIR conversion")
+                    }
+                    DataTyKind::Struct(_) => {
+                        unimplemented!("Struct references not yet supported in MLIR conversion")
+                    }
+                    DataTyKind::Ident(_) => {
+                        unimplemented!("Type identifier references not yet supported in MLIR conversion")
+                    }
+                    DataTyKind::Atomic(_) => {
+                        unimplemented!("Atomic references not yet supported in MLIR conversion")
+                    }
+                    DataTyKind::At(_, _) => {
+                        unimplemented!("At type references not yet supported in MLIR conversion")
+                    }
+                    DataTyKind::Ref(_) => {
+                        unimplemented!("Nested references not yet supported in MLIR conversion")
+                    }
+                    DataTyKind::RawPtr(_) => {
+                        unimplemented!("Raw pointer references not yet supported in MLIR conversion")
+                    }
+                    DataTyKind::Dead(_) => {
+                        unimplemented!("Dead type references not yet supported in MLIR conversion")
+                    }
+                }
             }
             DataTyKind::RawPtr(_) => {
                 unimplemented!("Raw pointer types not yet supported in MLIR conversion")
@@ -146,7 +200,7 @@ impl ToMlir for FunDef {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{Ident, Nat};
+    use crate::ast::{Ident, Memory, Nat, Ownership, Provenance, RefDty};
 
     /// Helper function to create a simple DataTy from DataTyKind
     fn make_data_ty(kind: DataTyKind) -> DataTy {
@@ -317,5 +371,67 @@ mod tests {
         ));
         let mlir_type = data_ty.to_mlir(&context);
         assert_eq!(mlir_type.to_string(), "memref<5xi32>");
+    }
+
+    #[test]
+    fn test_ref_scalar_to_mlir() {
+        let context = Context::new();
+        let ref_dty = RefDty::new(
+            Provenance::Ident(Ident::new("r")),
+            Ownership::Uniq,
+            Memory::CpuMem,
+            make_data_ty(DataTyKind::Scalar(ScalarTy::I32)),
+        );
+        let data_ty = make_data_ty(DataTyKind::Ref(Box::new(ref_dty)));
+        let mlir_type = data_ty.to_mlir(&context);
+        assert_eq!(mlir_type.to_string(), "memref<i32>");
+    }
+
+    #[test]
+    fn test_ref_scalar_f32_to_mlir() {
+        let context = Context::new();
+        let ref_dty = RefDty::new(
+            Provenance::Ident(Ident::new("r")),
+            Ownership::Shrd,
+            Memory::GpuGlobal,
+            make_data_ty(DataTyKind::Scalar(ScalarTy::F32)),
+        );
+        let data_ty = make_data_ty(DataTyKind::Ref(Box::new(ref_dty)));
+        let mlir_type = data_ty.to_mlir(&context);
+        assert_eq!(mlir_type.to_string(), "memref<f32>");
+    }
+
+    #[test]
+    fn test_ref_array_to_mlir() {
+        let context = Context::new();
+        let ref_dty = RefDty::new(
+            Provenance::Ident(Ident::new("r")),
+            Ownership::Uniq,
+            Memory::CpuMem,
+            make_data_ty(DataTyKind::Array(
+                Box::new(make_data_ty(DataTyKind::Scalar(ScalarTy::F32))),
+                Nat::Lit(10),
+            )),
+        );
+        let data_ty = make_data_ty(DataTyKind::Ref(Box::new(ref_dty)));
+        let mlir_type = data_ty.to_mlir(&context);
+        assert_eq!(mlir_type.to_string(), "memref<10xf32>");
+    }
+
+    #[test]
+    fn test_ref_array_dynamic_to_mlir() {
+        let context = Context::new();
+        let ref_dty = RefDty::new(
+            Provenance::Ident(Ident::new("r")),
+            Ownership::Shrd,
+            Memory::CpuMem,
+            make_data_ty(DataTyKind::Array(
+                Box::new(make_data_ty(DataTyKind::Scalar(ScalarTy::I64))),
+                Nat::Ident(Ident::new("n")),
+            )),
+        );
+        let data_ty = make_data_ty(DataTyKind::Ref(Box::new(ref_dty)));
+        let mlir_type = data_ty.to_mlir(&context);
+        assert_eq!(mlir_type.to_string(), "memref<?xi64>");
     }
 }
