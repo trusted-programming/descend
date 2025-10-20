@@ -18,10 +18,8 @@ pub fn gen(comp_unit: &CompilUnit, _idx_checks: bool) -> String {
     let module = Module::new(location);
     let mut builder = MlirBuilder::new(&context, module);
 
-    // Build each item in the compilation unit
-    for item in &comp_unit.items {
-        builder.build_item(item);
-    }
+    // Two-pass build so that calls know callee result types
+    builder.build_items_two_pass(comp_unit);
 
     // Dump the module to string
     builder.module().as_operation().to_string()
@@ -33,10 +31,8 @@ pub fn gen_checked(comp_unit: &CompilUnit, _idx_checks: bool) -> Result<String, 
     let module = Module::new(location);
     let mut builder = MlirBuilder::new(&context, module);
 
-    // Build each item in the compilation unit
-    for item in &comp_unit.items {
-        builder.build_item(item);
-    }
+    // Two-pass build so that calls know callee result types
+    builder.build_items_two_pass(comp_unit);
 
     // Verify the module
     if !builder.module().as_operation().verify() {

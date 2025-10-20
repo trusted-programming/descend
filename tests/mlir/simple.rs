@@ -57,3 +57,10 @@ fn for_loop() -> Res {
     insta::assert_snapshot!(output);
     Ok(())
 }
+
+#[test]
+fn func_call() -> Res {
+    let output = descend::compile("examples/simple/func.desc", BACKEND)?.0;
+    insta::assert_snapshot!(output);
+    Ok(())
+}

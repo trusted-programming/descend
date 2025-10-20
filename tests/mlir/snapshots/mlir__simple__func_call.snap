@@ -1,0 +1,17 @@
+---
+source: tests/mlir/simple.rs
+assertion_line: 64
+expression: output
+---
+module {
+  func.func @new_func() -> i32 {
+    %c10_i32 = arith.constant 10 : i32
+    %c32_i32 = arith.constant 32 : i32
+    %0 = arith.addi %c10_i32, %c32_i32 : i32
+    return %0 : i32
+  }
+  func.func @main() -> i32 {
+    %0 = call @new_func() : () -> i32
+    return %0 : i32
+  }
+}

@@ -14,14 +14,20 @@ pub struct MlirContext<'ctx, 'a, 'b> {
     pub context: &'ctx Context,
     pub variables: HashMap<String, Value<'a, 'b>>,
     pub current_block: BlockRef<'a, 'b>,
+    pub function_results: HashMap<String, Vec<Type<'ctx>>>,
 }
 
 impl<'ctx, 'a, 'b> MlirContext<'ctx, 'a, 'b> {
-    pub fn new(context: &'ctx Context, block: BlockRef<'a, 'b>) -> Self {
+    pub fn new(
+        context: &'ctx Context,
+        block: BlockRef<'a, 'b>,
+        function_results: HashMap<String, Vec<Type<'ctx>>>,
+    ) -> Self {
         Self {
             context,
             variables: HashMap::new(),
             current_block: block,
+            function_results,
         }
     }
 

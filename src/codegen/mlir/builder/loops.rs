@@ -1,9 +1,6 @@
 use melior::{
     dialect::scf,
-    ir::{
-        operation::OperationBuilder, Block, BlockLike, Location, Region, RegionLike, Type, Value,
-        ValueLike,
-    },
+    ir::{Block, BlockLike, Location, Region, RegionLike, Type, Value, ValueLike},
 };
 
 use super::context::{create_index_constant, MlirContext};
@@ -89,7 +86,7 @@ where
             let mut for_operands = vec![lower_value, upper_value, step_value];
             for_operands.extend(iter_arg_values);
 
-            let for_op = OperationBuilder::new("scf.for", location)
+            let for_op = melior::ir::operation::OperationBuilder::new("scf.for", location)
                 .add_operands(&for_operands)
                 .add_results(&iter_arg_types)
                 .add_regions([body_region])

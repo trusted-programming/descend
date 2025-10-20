@@ -2725,3 +2725,415 @@ Syntax:
 operation ::= `hivm.hir.set_mask_norm` attr-dict
 ```
 
+### `hivm.hir.atomic_cas` (hivm::AtomicCasOp)
+
+_Atomic Compare-And-Swap (CAS) Op_
+
+
+Syntax:
+
+```
+operation ::= `hivm.hir.atomic_cas` attr-dict
+              `ins` `(` $src `:` type($src) `)`
+              `outs` `(` $dst `:` type($dst) `)`
+              (`->` type($result_tensor)^)?
+```
+
+Compare-And-Swap (CAS) is an atomic operation that consists of three operands:
+Memory location (V), Expected old value (A), New value (B).
+The semantics of the operation are: the value of V is updated to B,
+only if the value of memory location V is equal to the expected old value A.
+The operation returns the original value of V regardless of whether it is updated or not.
+
+Constraints:
+  1. The input memref and output memref must have the same rank
+     and the same element type.
+
+Arguments:
+  * `src0`: expected old value
+  * `src1`: new value
+  * `dst`: memory location in GM
+
+Examples:
+```mlir
+hivm.hir.atomic_cas ins(%src0, %src1 : memref<?xf32>, memref<?xf32>) outs(%dst : memref<?xf32>)
+%result = hivm.hir.atomic_cas ins(%src0, %src1 : tensor<?xf32>, tensor<?xf32>) outs(%dst : tensor<?xf32>) -> tensor<?xf32>
+```
+
+#### Operands:
+
+| Operand | Description |
+| :-----: | ----------- |
+| `src` | variadic of any type
+| `dst` | Tensor or Memref
+
+#### Results:
+
+| Result | Description |
+| :----: | ----------- |
+| `result_tensor` | ranked tensor of any type values
+
+### `hivm.hir.atomic_xchg` (hivm::AtomicXchgOp)
+
+_Atomic Exchange Op_
+
+
+Syntax:
+
+```
+operation ::= `hivm.hir.atomic_xchg` attr-dict
+              `ins` `(` $src `:` type($src) `)`
+              `outs` `(` $dst `:` type($dst) `)`
+              (`->` type($result_tensor)^)?
+```
+
+Atomic exchange is an atomic operation that consists of three steps:
+1. Read the current value of the specified memory address
+2. Write the new value to the memory address
+3. Return the old value read previously
+The whole process is atomic, that is, it will not be interrupted by other threads during the operation.
+
+Constraints:
+  1. The input memref and output memref must have the same rank
+     and the same element type.
+
+Arguments:
+  * `src`: new value
+  * `dst`: memory location in GM
+
+Examples:
+```mlir
+hivm.hir.atomic_xchg ins(%src : memref<?xf32>) outs(%dst : memref<?xf32>)
+%result = hivm.hir.atomic_cas ins(%src : tensor<?xf32>) outs(%dst : tensor<?xf32>) -> tensor<?xf32>
+```
+
+#### Operands:
+
+| Operand | Description |
+| :-----: | ----------- |
+| `src` | variadic of any type
+| `dst` | Tensor or Memref
+
+#### Results:
+
+| Result | Description |
+| :----: | ----------- |
+| `result_tensor` | ranked tensor of any type values
+
+### `hivm.hir.copy` (hivm::CopyOp)
+
+_HIVM data copy operation_
+
+
+Syntax:
+
+```
+operation ::= `hivm.hir.copy` `ins` `(` $src `:` type($src) `)`
+              `outs` `(` $dst `:` type($dst) `)`
+              attr-dict
+              (`pad_mode` `=` $pad_mode^)?
+              (`pad_value` `=` $pad_value^ `:` type($pad_value))?
+              (`collapse_reassociation` `=` $collapse_reassociation^)?
+              (`->` type($result_tensor)^)?
+```
+
+Copy the data between local memory hierarchies. Currently only
+support copying from unified buffer to unified buffer.
+
+Examples:
+```mlir
+hivm.copy ins(%src : memref<16x16xf16, #hivm.address_space<ub>>) outs(%dst : memref<16x16xf16, #hivm.address_space<ub>>)
+```
+
+Constraints:
+- `src` and `dst` are expected to have the same element type.
+- If `pad_mode` is not set, `src` and `dst` shape should be the same.
+- Only support left padding.
+- `pad_value` should have the same element type as `src` and `dst`.
+
+### Non-contigous reassocicative reshape
+`hivm.hir.copy` also supports copying non-contiguous data to contiguous storage, and vice versa.
+This can be seen as "expanding" or "collapsing" the data. The `collapse_reassociation` attribute is used to
+specify which axes are collapsed together.
+For example:
+```mlir
+hivm.hir.copy ins(%src : memref<32x4xbf16, strided<[16, 1]>>) outs(%dst : memref<32x4xbf16, strided<[4, 1]>>)
+  collapse_reassociation = [[0, 1]]
+```
+Means that the 0th and 1st axes are collapsed contiguously.
+
+Traits: `AlwaysSpeculatableImplTrait`, `SinglePipeOpTrait`, `UniformReassociationFlattenTrait`
+
+Interfaces: `ConditionallySpeculatable`, `CopyOpInterface`, `DestinationStyleOpInterface`, `FlattenInterface`, `HIVMCoreTypeInterface`, `HIVMStructuredOpInterface`, `HIVMStructuredOp`, `InferCoreTypeInterface`, `MemoryEffectsOpInterface`, `OpPipeInterface`
+
+#### Attributes:
+
+<table>
+<tr><th>Attribute</th><th>MLIR Type</th><th>Description</th></tr>
+<tr><td><code>pad_mode</code></td><td>::mlir::hivm::PadModeAttr</td><td></td></tr>
+<tr><td><code>collapse_reassociation</code></td><td>::mlir::ArrayAttr</td><td>Array of 64-bit integer array attributes</td></tr>
+</table>
+
+#### Operands:
+
+| Operand | Description |
+| :-----: | ----------- |
+| `src` | Tensor or Memref
+| `dst` | Tensor or Memref
+| `pad_value` | any type
+
+#### Results:
+
+| Result | Description |
+| :----: | ----------- |
+| `result_tensor` | ranked tensor of any type values
+
+### `hivm.hir.fixpipe` (hivm::FixpipeOp)
+
+_HIVM data copy operation from L0C to L1 or Global Memory_
+
+
+Syntax:
+
+```
+operation ::= `hivm.hir.fixpipe` attr-dict
+              `ins` `(` $src `:` type($src) `)`
+              `outs` `(` $dst `:` type($dst) `)`
+              (`unit_flag` `[` $unit_flag_mode^ (`,` $unit_flag_cond^)? `]`)?
+              (`->` type($result_tensor)^)?
+```
+
+Fixpipe is pipeline that performing data movement from L0C to OUT or L1,
+with on-the-fly fixed function of pre-stage quantization,
+pre-stage ReLU, element-wise add, post-stage ReLU, post-stage quantization.
+
+Additionally, Fixpipe is also capable of layout transform.
+
+Traits: `AlwaysSpeculatableImplTrait`, `CubeCoreTypeTrait`, `OpPipeTrait<PIPE::PIPE_FIX>`, `SinglePipeOpTrait`
+
+Interfaces: `ConditionallySpeculatable`, `CopyOpInterface`, `DestinationStyleOpInterface`, `FlattenInterface`, `HIVMCoreTypeInterface`, `HIVMStructuredOpInterface`, `HIVMStructuredOp`, `HIVMUnitFlagEnabledInterface`, `MemoryEffectsOpInterface`, `OpPipeInterface`
+
+#### Attributes:
+
+<table>
+<tr><th>Attribute</th><th>MLIR Type</th><th>Description</th></tr>
+<tr><td><code>enable_nz2nd</code></td><td>::mlir::UnitAttr</td><td>unit attribute</td></tr>
+<tr><td><code>pre_quant</code></td><td>::mlir::hivm::FixpipePreQuantModeAttr</td><td>HIVM fixpipe pre_quant mode</td></tr>
+<tr><td><code>pre_relu</code></td><td>::mlir::hivm::FixpipePreReluModeAttr</td><td>HIVM fixpipe pre_relu mode</td></tr>
+<tr><td><code>channel_split</code></td><td>::mlir::BoolAttr</td><td>bool attribute</td></tr>
+<tr><td><code>unit_flag_mode</code></td><td>::mlir::hivm::UnitFlagAttr</td><td></td></tr>
+</table>
+
+#### Operands:
+
+| Operand | Description |
+| :-----: | ----------- |
+| `src` | shaped of any type values
+| `dst` | shaped of any type values
+| `unit_flag_cond` | 1-bit signless integer
+
+#### Results:
+
+| Result | Description |
+| :----: | ----------- |
+| `result_tensor` | ranked tensor of any type values
+
+### `hivm.hir.load` (hivm::LoadOp)
+
+_HIVM data load operation_
+
+
+Syntax:
+
+```
+operation ::= `hivm.hir.load` `ins` `(` $src `:` type($src) `)`
+              `outs` `(` $dst `:` type($dst) `)`
+              attr-dict
+              (`pad_mode` `=` $pad_mode^)?
+              (`pad_value` `=` $pad_value^ `:` type($pad_value))?
+              (`left_padding_num` `=` $left_padding_num^ `:` type($left_padding_num))?
+              (`init_out_buffer` `=` $init_out_buffer^ )?
+              (`right_padding_num` `=` $right_padding_num^ `:` type($right_padding_num))?
+              (`init_condition` `=` $init_condition^ `:` type($init_condition))?
+              (`may_implicit_transpose_with_last_axis` `=` $may_implicit_transpose_with_last_axis^ )?
+              (`->` type($result_tensor)^)?
+```
+
+Loads the data from the global memory to the local buffer.
+Currently only support loading to the unified buffer.
+
+Examples:
+```mlir
+hivm.load ins(%src : memref<16x16xf16, #hivm.address_space<gm>>) outs(%dst : memref<16x16xf16, #hivm.address_space<ub>>)
+```
+
+Constraints:
+- `src` and `dst` are expected to have the same element type.
+- If `pad_mode` is not set, `src` and `dst` shape should be the same.
+- Supports both left and right padding.
+- `pad_value` should have the same element type as `src` and `dst`.
+
+Traits: `AlwaysSpeculatableImplTrait`, `AttrSizedOperandSegments`, `OpPipeTrait<PIPE::PIPE_MTE2>`, `SinglePipeOpTrait`, `UniformReassociationFlattenTrait`
+
+Interfaces: `BiShengIRAggregatedOpInterface`, `ConditionallySpeculatable`, `CopyOpInterface`, `DestinationStyleOpInterface`, `FlattenInterface`, `HIVMCoreTypeInterface`, `HIVMStructuredOpInterface`, `HIVMStructuredOp`, `InferCoreTypeInterface`, `MemoryEffectsOpInterface`, `OpPipeInterface`
+
+#### Attributes:
+
+<table>
+<tr><th>Attribute</th><th>MLIR Type</th><th>Description</th></tr>
+<tr><td><code>pad_mode</code></td><td>::mlir::hivm::PadModeAttr</td><td></td></tr>
+<tr><td><code>init_out_buffer</code></td><td>::mlir::BoolAttr</td><td>bool attribute</td></tr>
+<tr><td><code>may_implicit_transpose_with_last_axis</code></td><td>::mlir::BoolAttr</td><td>bool attribute</td></tr>
+</table>
+
+#### Operands:
+
+| Operand | Description |
+| :-----: | ----------- |
+| `src` | Tensor or Memref
+| `dst` | Tensor or Memref
+| `pad_value` | any type
+| `left_padding_num` | index
+| `right_padding_num` | any type
+| `init_condition` | any type
+
+#### Results:
+
+| Result | Description |
+| :----: | ----------- |
+| `result_tensor` | ranked tensor of any type values
+
+### `hivm.hir.nd2nz` (hivm::ND2NZOp)
+
+_HIVM data copy operation with on-the-fly ND to NZ layout transformation_
+
+
+Syntax:
+
+```
+operation ::= `hivm.hir.nd2nz` attr-dict
+              `ins` `(` $src `:` type($src) `)`
+              `outs` `(` $dst `:` type($dst) `)`
+              (`init_out_buffer` `=` $init_out_buffer^ )?
+              (`pad_value` `=` $pad_value^ `:` type($pad_value))?
+              (`init_condition` `=` $init_condition^ `:` type($init_condition))?
+              (`->` type($result_tensor)^)?
+```
+
+- `dst_continuous`: if present, signify that the source data is stored continuously
+  in the destination buffer. This must be set in order for this op to be converted to
+  library function call.
+Constraints:
+- if `init_out_buffer` is true, `pad_value` should have value.
+
+Traits: `AlwaysSpeculatableImplTrait`, `AttrSizedOperandSegments`, `CubeCoreTypeTrait`, `OpPipeTrait<PIPE::PIPE_MTE2>`, `SinglePipeOpTrait`
+
+Interfaces: `BiShengIRAggregatedOpInterface`, `ConditionallySpeculatable`, `CopyOpInterface`, `DestinationStyleOpInterface`, `FlattenInterface`, `HIVMCoreTypeInterface`, `HIVMStructuredOpInterface`, `HIVMStructuredOp`, `MemoryEffectsOpInterface`, `OpPipeInterface`
+
+#### Attributes:
+
+<table>
+<tr><th>Attribute</th><th>MLIR Type</th><th>Description</th></tr>
+<tr><td><code>dst_continuous</code></td><td>::mlir::UnitAttr</td><td>unit attribute</td></tr>
+<tr><td><code>init_out_buffer</code></td><td>::mlir::BoolAttr</td><td>bool attribute</td></tr>
+</table>
+
+#### Operands:
+
+| Operand | Description |
+| :-----: | ----------- |
+| `src` | shaped of any type values
+| `dst` | shaped of any type values
+| `pad_value` | any type
+| `init_condition` | any type
+
+#### Results:
+
+| Result | Description |
+| :----: | ----------- |
+| `result_tensor` | variadic of ranked tensor of any type values
+
+### `hivm.hir.nz2nd` (hivm::NZ2NDOp)
+
+_HIVM data copy operation from L1 to Global Memory with NZ2ND conversion_
+
+
+Syntax:
+
+```
+operation ::= `hivm.hir.nz2nd` attr-dict
+              `ins` `(` $src `:` type($src) `)`
+              `outs` `(` $dst `:` type($dst) `)`
+              (`->` type($result_tensor)^)?
+```
+
+NZ2ND does data movement from L1 to OUT with NZ2ND conversion.
+
+Traits: `AlwaysSpeculatableImplTrait`, `CubeCoreTypeTrait`, `OpPipeTrait<PIPE::PIPE_MTE3>`, `SinglePipeOpTrait`
+
+Interfaces: `ConditionallySpeculatable`, `CopyOpInterface`, `DestinationStyleOpInterface`, `FlattenInterface`, `HIVMCoreTypeInterface`, `HIVMStructuredOpInterface`, `HIVMStructuredOp`, `MemoryEffectsOpInterface`, `OpPipeInterface`
+
+#### Operands:
+
+| Operand | Description |
+| :-----: | ----------- |
+| `src` | Tensor or Memref
+| `dst` | Tensor or Memref
+
+#### Results:
+
+| Result | Description |
+| :----: | ----------- |
+| `result_tensor` | ranked tensor of any type values
+
+### `hivm.hir.store` (hivm::StoreOp)
+
+_HIVM data store operation_
+
+
+Syntax:
+
+```
+operation ::= `hivm.hir.store` `ins` `(` $src `:` type($src) `)`
+              `outs` `(` $dst `:` type($dst) `)`
+              attr-dict
+              (`atomic` `=` $atomic_kind^)?
+              (`->` type($result_tensor)^)?
+```
+
+Stores the data on local buffer to global memory.
+Currently only support storing data on the unified buffer.
+
+Examples:
+```mlir
+hivm.store ins(%src : memref<16x16xf16, #hivm.address_space<ub>>) outs(%dst : memref<16x16xf16, #hivm.address_space<gm>>)
+```
+
+Constraints:
+- `src` and `dst` are expected to have the same element type.
+- If `atomic_kind` is set, the kind is one of `add`, `max`, `min`.
+
+Traits: `AlwaysSpeculatableImplTrait`, `OpPipeTrait<PIPE::PIPE_MTE3>`, `SinglePipeOpTrait`, `UniformReassociationFlattenTrait`
+
+Interfaces: `ConditionallySpeculatable`, `CopyOpInterface`, `DestinationStyleOpInterface`, `FlattenInterface`, `HIVMCoreTypeInterface`, `HIVMStructuredOpInterface`, `HIVMStructuredOp`, `InferCoreTypeInterface`, `MemoryEffectsOpInterface`, `OpPipeInterface`
+
+#### Attributes:
+
+<table>
+<tr><th>Attribute</th><th>MLIR Type</th><th>Description</th></tr>
+<tr><td><code>atomic_kind</code></td><td>::mlir::hivm::AtomicKindAttr</td><td>Atomic Operation Kind for StoreOp</td></tr>
+<tr><td><code>may_implicit_transpose_with_last_axis</code></td><td>::mlir::BoolAttr</td><td>bool attribute</td></tr>
+</table>
+
+#### Operands:
+
+| Operand | Description |
+| :-----: | ----------- |
+| `src` | Tensor or Memref
+| `dst` | Tensor or Memref
+
+#### Results:
+
+| Result | Description |
+| :----: | ----------- |
+| `result_tensor` | ranked tensor of any type values

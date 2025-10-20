@@ -75,29 +75,34 @@ where
         ExprKind::IdxAssign(_, _, _) => {
             unimplemented!("Index assignment not yet supported in MLIR backend")
         }
-        ExprKind::App(func_name, _kinded_args, value_args) => {
-            // Handle intrinsic functions that should be ignored in MLIR
-            match func_name.name.as_ref() {
-                "gpu_device" => {
-                    // Ignore gpu_device calls - device context is implicit in HIVM
-                    None
-                }
-                "gpu_alloc_copy"
-                | "copy_to_host"
-                | "hivm_vexp"
-                | "hivm_hir_vreduce_max"
-                | "hivm_hir_vsub"
-                | "hivm_hir_vreduce_add"
-                | "hivm_hir_vdiv" => {
-                    // Ignore HIVM placeholder functions - these will be replaced with actual HIVM operations
-                    None
-                }
-                _ => {
-                    unimplemented!(
-                        "Function application for '{}' not yet supported in MLIR backend",
-                        func_name.name
-                    )
-                }
+        ExprKind::App(ident, _gen_args, args) => {
+            use melior::{
+                dialect::func,
+                ir::{attribute::FlatSymbolRefAttribute, BlockLike, Type},
+            };
+
+            // Lower operands
+            let mut operands: Vec<Value<'a, 'b>> = Vec::with_capacity(args.len());
+            for a in args {
+                let v = build_expr(a, ctx)?;
+                operands.push(v);
+            }
+
+            // Determine callee result types (may be empty)
+            let result_types: Vec<Type<'_>> = ctx
+                .function_results
+                .get(&ident.name.to_string())
+                .cloned()
+                .unwrap_or_else(|| Vec::new());
+
+            let location = ctx.location();
+            let callee = FlatSymbolRefAttribute::new(ctx.context, &ident.name);
+            let call_op = func::call(ctx.context, callee, &operands, &result_types, location);
+            let call_ref = ctx.current_block.append_operation(call_op);
+            if result_types.is_empty() {
+                None
+            } else {
+                Some(call_ref.result(0).unwrap().into())
             }
         }
         ExprKind::DepApp(_, _) => {

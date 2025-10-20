@@ -1,5 +1,6 @@
-use melior::ir::{
-    operation::OperationBuilder, Block, BlockLike, Region, RegionLike, Type, Value, ValueLike,
+use melior::{
+    dialect::scf,
+    ir::{Block, BlockLike, Region, RegionLike, Type, Value, ValueLike},
 };
 
 use super::context::{append_yield, MlirContext};
@@ -64,14 +65,8 @@ where
     // Add scf.yield to the else block
     append_yield(else_block, None, location);
 
-    // Build the scf.if operation without result types (if without else produces no value)
-    let if_op = OperationBuilder::new("scf.if", location)
-        .add_operands(&[cond_value])
-        .add_regions([then_region, else_region])
-        .build()
-        .expect("Failed to build scf.if operation");
-
-    // Append the if operation to the current block
+    // Build the scf.if operation without result types
+    let if_op = scf::r#if(cond_value, &[], then_region, else_region, location);
     ctx.current_block.append_operation(if_op);
 
     // If without else doesn't produce a value
@@ -106,15 +101,8 @@ where
         vec![]
     };
 
-    // Build the scf.if operation manually using OperationBuilder
-    let if_op = OperationBuilder::new("scf.if", location)
-        .add_operands(&[cond_value])
-        .add_results(&result_types)
-        .add_regions([then_region, else_region])
-        .build()
-        .expect("Failed to build scf.if operation");
-
-    // Append the if operation to the current block
+    // Build the scf.if operation with result types using the dialect helper
+    let if_op = scf::r#if(cond_value, &result_types, then_region, else_region, location);
     let if_op_ref = ctx.current_block.append_operation(if_op);
 
     // Return the result value if the if-else produces a value
