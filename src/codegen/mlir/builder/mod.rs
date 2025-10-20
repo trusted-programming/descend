@@ -9,7 +9,7 @@ pub mod place;
 
 use melior::{
     dialect::func,
-    ir::{operation::OperationLike, Block, BlockLike, Module, RegionLike},
+    ir::{operation::OperationLike, Block, BlockLike, Module, RegionLike, Location},
     Context,
 };
 
@@ -59,13 +59,31 @@ impl<'ctx> MlirBuilder<'ctx> {
         let region = func_op_ref
             .region(0)
             .expect("Function should have a region");
-        let entry_block = region.append_block(Block::new(&[]));
+
+        // Create entry block with function parameter arguments
+        let location = Location::unknown(self.context);
+        let param_types: Vec<(Type<'_>, Location<'_>)> = fun
+            .param_decls
+            .iter()
+            .filter_map(|p| p.ty.as_ref())
+            .map(|ty| (ty.to_mlir(self.context), location))
+            .collect();
+        let entry_block = region.append_block(Block::new(&param_types));
 
         // For single-pass legacy path, we create an empty map
         let fn_results: HashMap<String, Vec<melior::ir::Type<'_>>> = HashMap::new();
 
         // Create context for code generation
         let mut mlir_ctx = MlirContext::new(self.context, entry_block, fn_results);
+
+        // Bind function parameters to block arguments
+        for (i, param) in fun.param_decls.iter().enumerate() {
+            if let Some(arg) = mlir_ctx.current_block.argument(i).ok().map(|a| a.into()) {
+                mlir_ctx
+                    .variables
+                    .insert(param.ident.name.to_string(), arg);
+            }
+        }
 
         // Build the function body expression using the context
         let result_value = build_expr(&fun.body.body, &mut mlir_ctx);
@@ -107,8 +125,24 @@ impl<'ctx> MlirBuilder<'ctx> {
         // Pass 2: build bodies
         for (_name, op_ref, fun) in fun_ops {
             let region = op_ref.region(0).expect("Function should have a region");
-            let entry_block = region.append_block(Block::new(&[]));
+            // Create entry block with function parameter argument types
+            let location = Location::unknown(self.context);
+            let param_types: Vec<(Type<'_>, Location<'_>)> = fun
+                .param_decls
+                .iter()
+                .filter_map(|p| p.ty.as_ref())
+                .map(|ty| (ty.to_mlir(self.context), location))
+                .collect();
+            let entry_block = region.append_block(Block::new(&param_types));
+
             let mut ctx = MlirContext::new(self.context, entry_block, results_map.clone());
+
+            // Bind function parameters to block arguments
+            for (i, param) in fun.param_decls.iter().enumerate() {
+                if let Some(arg) = ctx.current_block.argument(i).ok().map(|a| a.into()) {
+                    ctx.variables.insert(param.ident.name.to_string(), arg);
+                }
+            }
             let result_value = build_expr(&fun.body.body, &mut ctx);
             let location = ctx.location();
             if let Some(value) = result_value {

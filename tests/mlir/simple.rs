@@ -64,3 +64,10 @@ fn func_call() -> Res {
     insta::assert_snapshot!(output);
     Ok(())
 }
+
+#[test]
+fn func_params() -> Res {
+    let output = descend::compile("examples/simple/func_params.desc", BACKEND)?.0;
+    insta::assert_snapshot!(output);
+    Ok(())
+}
