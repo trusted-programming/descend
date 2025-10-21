@@ -1,5 +1,5 @@
 ---
-source: tests/mlir/simple.rs
+source: tests/mlir/core.rs
 assertion_line: 4
 expression: output
 ---

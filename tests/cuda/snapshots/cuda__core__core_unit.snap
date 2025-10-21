@@ -1,5 +1,6 @@
 ---
-source: tests/cuda/simple.rs
+source: tests/cuda/core.rs
+assertion_line: 36
 expression: output
 ---
 #include "descend.cuh"
@@ -8,12 +9,12 @@ function declarations
 */
 __host__ auto main(
 
-    ) -> descend::i32;
+    ) -> void;
 /*
 function definitions
 */
 __host__ auto main(
 
-    ) -> descend::i32 {
-  return 42;
+    ) -> void {
+  const auto x = 10;
 }

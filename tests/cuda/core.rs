@@ -31,7 +31,7 @@ fn binop() -> Res {
 }
 
 #[test]
-fn simple_unit() -> Res {
+fn core_unit() -> Res {
     let output = descend::compile("examples/core/unit.desc", BACKEND)?.0;
     insta::assert_snapshot!(output);
     Ok(())

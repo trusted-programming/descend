@@ -29,7 +29,6 @@
 //! ```
 
 pub mod builder;
-pub mod dialects; // Generated dialect bindings
 pub mod error;
 pub mod to_mlir;
 
@@ -37,7 +36,7 @@ use builder::MlirBuilder;
 use error::MlirError;
 use melior::{
     dialect::DialectRegistry,
-    ir::{Location, Module},
+    ir::{Location, Module, operation::OperationLike},
     utility::register_all_dialects,
     Context,
 };
@@ -62,6 +61,13 @@ fn build_module_internal(comp_unit: &CompilUnit) -> Result<String, MlirError> {
 
     // Two-pass build so that calls know callee result types
     builder.build_items_two_pass(comp_unit);
+
+    // Verify the module before generating the string
+    if !builder.module().as_operation().verify() {
+        return Err(MlirError::General(
+            "MLIR module verification failed".to_string(),
+        ));
+    }
 
     Ok(builder.module().as_operation().to_string())
 }

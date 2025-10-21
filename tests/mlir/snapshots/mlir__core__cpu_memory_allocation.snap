@@ -1,6 +1,6 @@
 ---
-source: tests/mlir/simple.rs
-assertion_line: 85
+source: tests/mlir/core.rs
+assertion_line: 4
 expression: output
 ---
 module {

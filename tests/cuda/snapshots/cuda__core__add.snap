@@ -1,5 +1,6 @@
 ---
-source: tests/cuda/simple.rs
+source: tests/cuda/core.rs
+assertion_line: 15
 expression: output
 ---
 #include "descend.cuh"

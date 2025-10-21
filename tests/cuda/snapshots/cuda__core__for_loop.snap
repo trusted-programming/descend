@@ -1,5 +1,6 @@
 ---
-source: tests/cuda/simple.rs
+source: tests/cuda/core.rs
+assertion_line: 57
 expression: output
 ---
 #include "descend.cuh"
@@ -15,13 +16,10 @@ function definitions
 __host__ auto main(
 
     ) -> descend::i32 {
-  const auto x = 10;
-  const auto y = 20;
-  if ((x < y)) {
-    const auto result = (x + y);
-  } else {
-    const auto result = (x - y);
+  auto sum = 0;
+  for (std::size_t i = 0; (i < 10); i = (i + 1u)) {
+    sum = (sum + 1);
   }
 
-  return 0;
+  return sum;
 }

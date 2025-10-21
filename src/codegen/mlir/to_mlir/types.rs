@@ -387,8 +387,253 @@ impl ToMlir for FunDef {
     }
 }
 
-/// Generate function signature with HIVM address spaces
-fn generate_function_signature(fun: &crate::ast::FunDef, context: &Context) -> String {
+/// Parameter usage information
+#[derive(Debug, Clone, PartialEq)]
+struct ParameterUsage {
+    pub read: bool,
+    pub write: bool,
+}
+
+impl ParameterUsage {
+    fn new() -> Self {
+        Self { read: false, write: false }
+    }
+    
+    fn mark_read(&mut self) {
+        self.read = true;
+    }
+    
+    fn mark_write(&mut self) {
+        self.write = true;
+    }
+    
+    fn needs_ub_allocation(&self) -> bool {
+        // Only allocate ub memory if the parameter is read from
+        // (parameters that are only written to can write directly to global memory)
+        self.read
+    }
+}
+
+/// Collect which parameters are referenced in the function body and how they are used
+fn collect_parameter_usage(fun: &crate::ast::FunDef) -> std::collections::HashMap<String, ParameterUsage> {
+    use crate::ast::{Expr, ExprKind, PlaceExprKind};
+    use std::collections::HashMap;
+    
+    let mut param_usage = HashMap::new();
+    
+    fn walk_expr(expr: &Expr, param_usage: &mut HashMap<String, ParameterUsage>) {
+        match &expr.expr {
+            ExprKind::PlaceExpr(place_expr) => {
+                // This is a read operation
+                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                    param_usage.entry(ident.name.to_string()).or_insert_with(ParameterUsage::new).mark_read();
+                }
+            }
+            ExprKind::BinOp(_, lhs, rhs) => {
+                walk_expr(lhs, param_usage);
+                walk_expr(rhs, param_usage);
+            }
+            ExprKind::Let(_, _, value_expr) => {
+                walk_expr(value_expr, param_usage);
+            }
+            ExprKind::Seq(exprs) => {
+                for expr in exprs {
+                    walk_expr(expr, param_usage);
+                }
+            }
+            ExprKind::Assign(place_expr, value_expr) => {
+                // This is a write operation
+                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                    param_usage.entry(ident.name.to_string()).or_insert_with(ParameterUsage::new).mark_write();
+                }
+                walk_expr(value_expr, param_usage);
+            }
+            ExprKind::IdxAssign(place_expr, _, value_expr) => {
+                // This is a write operation
+                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                    param_usage.entry(ident.name.to_string()).or_insert_with(ParameterUsage::new).mark_write();
+                }
+                walk_expr(value_expr, param_usage);
+            }
+            ExprKind::App(_, _, args) => {
+                for arg in args {
+                    walk_expr(arg, param_usage);
+                }
+            }
+            ExprKind::IfElse(cond, case_true, case_false) => {
+                walk_expr(cond, param_usage);
+                walk_expr(case_true, param_usage);
+                walk_expr(case_false, param_usage);
+            }
+            ExprKind::If(cond, case_true) => {
+                walk_expr(cond, param_usage);
+                walk_expr(case_true, param_usage);
+            }
+            ExprKind::ForNat(_, _, body) => {
+                walk_expr(body, param_usage);
+            }
+            ExprKind::Ref(_, _, place_expr) => {
+                // Taking a reference is a read operation
+                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                    param_usage.entry(ident.name.to_string()).or_insert_with(ParameterUsage::new).mark_read();
+                }
+            }
+            ExprKind::Unsafe(expr) => {
+                walk_expr(expr, param_usage);
+            }
+            _ => {
+                // Other expression types don't contain variable references
+            }
+        }
+    }
+    
+    walk_expr(&fun.body.body, &mut param_usage);
+    param_usage
+}
+
+/// Collect which parameters are referenced in the function body (legacy function for compatibility)
+fn collect_used_parameters(fun: &crate::ast::FunDef) -> std::collections::HashSet<String> {
+    use crate::ast::{Expr, ExprKind, PlaceExprKind};
+    use std::collections::HashSet;
+    
+    let mut used_params = HashSet::new();
+    
+    fn walk_expr(expr: &Expr, used_params: &mut HashSet<String>) {
+        match &expr.expr {
+            ExprKind::PlaceExpr(place_expr) => {
+                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                    used_params.insert(ident.name.to_string());
+                }
+            }
+            ExprKind::BinOp(_, lhs, rhs) => {
+                walk_expr(lhs, used_params);
+                walk_expr(rhs, used_params);
+            }
+            ExprKind::Let(_, _, value_expr) => {
+                walk_expr(value_expr, used_params);
+            }
+            ExprKind::Seq(exprs) => {
+                for expr in exprs {
+                    walk_expr(expr, used_params);
+                }
+            }
+            ExprKind::Assign(place_expr, value_expr) => {
+                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                    used_params.insert(ident.name.to_string());
+                }
+                walk_expr(value_expr, used_params);
+            }
+            ExprKind::App(_, _, args) => {
+                for arg in args {
+                    walk_expr(arg, used_params);
+                }
+            }
+            ExprKind::IfElse(cond, case_true, case_false) => {
+                walk_expr(cond, used_params);
+                walk_expr(case_true, used_params);
+                walk_expr(case_false, used_params);
+            }
+            ExprKind::If(cond, case_true) => {
+                walk_expr(cond, used_params);
+                walk_expr(case_true, used_params);
+            }
+            ExprKind::ForNat(_, _, body) => {
+                walk_expr(body, used_params);
+            }
+            ExprKind::Ref(_, _, place_expr) => {
+                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                    used_params.insert(ident.name.to_string());
+                }
+            }
+            ExprKind::Unsafe(expr) => {
+                walk_expr(expr, used_params);
+            }
+            _ => {
+                // Other expression types don't contain variable references
+            }
+        }
+    }
+    
+    walk_expr(&fun.body.body, &mut used_params);
+    used_params
+}
+
+/// Generate load operations for GPU parameters
+fn generate_load_operations(
+    fun: &crate::ast::FunDef, 
+    param_usage: &std::collections::HashMap<String, ParameterUsage>,
+    context: &Context
+) -> String {
+    use crate::ast::{DataTyKind, Memory, TyKind};
+    use std::collections::HashMap;
+    
+    let mut load_ops = String::new();
+    let mut param_to_local = HashMap::new();
+    let mut alloc_counter = 0;
+    
+    for (i, param) in fun.param_decls.iter().enumerate() {
+        let param_name = param.ident.name.to_string();
+        
+        // Check if parameter is used and needs ub allocation
+        let usage = match param_usage.get(&param_name) {
+            Some(usage) => usage,
+            None => continue, // Parameter not used at all
+        };
+        
+        // Only allocate ub memory if the parameter is read from
+        if !usage.needs_ub_allocation() {
+            continue;
+        }
+        
+        if let Some(ty) = &param.ty {
+            if let TyKind::Data(data_ty) = &ty.ty {
+                let needs_gpu_load = match &data_ty.dty {
+                    DataTyKind::At(_, mem) => {
+                        matches!(mem, Memory::GpuGlobal | Memory::GpuShared)
+                    }
+                    DataTyKind::Ref(ref_dty) => {
+                        matches!(ref_dty.mem, Memory::GpuGlobal | Memory::GpuShared)
+                    }
+                    _ => false,
+                };
+                
+                if needs_gpu_load {
+                    // Generate the original type with gm address space
+                    let gm_type = get_mlir_type_string_with_address_space(ty, context);
+                    
+                    // Generate the local type with ub address space
+                    let ub_type = match &data_ty.dty {
+                        DataTyKind::At(inner, _) => {
+                            let base_type = inner.to_mlir(context);
+                            let base_str = base_type.to_string();
+                            apply_hivm_address_space(base_str, &Memory::GpuLocal)
+                        }
+                        DataTyKind::Ref(ref_dty) => {
+                            let base_type = ref_dty.dty.to_mlir(context);
+                            let base_str = base_type.to_string();
+                            apply_hivm_address_space(base_str, &Memory::GpuLocal)
+                        }
+                        _ => gm_type.clone(),
+                    };
+                    
+                    // Generate alloc and load operations
+                    load_ops.push_str(&format!("    %alloc{} = memref.alloc() : {}\n", alloc_counter, ub_type));
+                    load_ops.push_str(&format!("    hivm.hir.load ins(%arg{} : {}) outs(%alloc{} : {})\n", 
+                        i, gm_type, alloc_counter, ub_type));
+                    
+                    // Map parameter to its local version
+                    param_to_local.insert(param_name, format!("%alloc{}", alloc_counter));
+                    alloc_counter += 1;
+                }
+            }
+        }
+    }
+    
+    load_ops
+}
+
+/// Generate function with body including load operations for GPU parameters
+fn generate_function_with_body(fun: &crate::ast::FunDef, context: &Context) -> String {
     // Pre-allocate with estimated capacity to avoid reallocations
     let estimated_capacity = 50 + fun.ident.name.len() + fun.param_decls.len() * 20;
     let mut signature = String::with_capacity(estimated_capacity);
@@ -425,7 +670,16 @@ fn generate_function_signature(fun: &crate::ast::FunDef, context: &Context) -> S
         signature.push_str(&generate_hacc_attributes_string(context));
     }
 
-    signature.push_str(" {\n    return\n  }\n");
+    signature.push_str(" {\n");
+    
+    // Collect parameter usage information
+    let param_usage = collect_parameter_usage(fun);
+    
+    // Generate load operations for GPU parameters (only for read usage)
+    let load_ops = generate_load_operations(fun, &param_usage, context);
+    signature.push_str(&load_ops);
+    
+    signature.push_str("    return\n  }\n");
     signature
 }
 
@@ -446,7 +700,7 @@ pub fn generate_mlir_string_with_hivm(comp_unit: &crate::ast::CompilUnit) -> Str
 
     for item in &comp_unit.items {
         if let crate::ast::Item::FunDef(fun) = item {
-            result.push_str(&generate_function_signature(fun, &context));
+            result.push_str(&generate_function_with_body(fun, &context));
         }
     }
 
@@ -813,7 +1067,7 @@ mod tests {
     fn test_gpu_function_signature_with_attributes() {
         let context = Context::new();
         let gpu_fun = make_gpu_function();
-        let signature = generate_function_signature(&gpu_fun, &context);
+        let signature = generate_function_with_body(&gpu_fun, &context);
         
         // Check that the signature contains the GPU attributes
         assert!(signature.contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
@@ -825,7 +1079,7 @@ mod tests {
     fn test_cpu_function_signature_without_attributes() {
         let context = Context::new();
         let cpu_fun = make_cpu_function();
-        let signature = generate_function_signature(&cpu_fun, &context);
+        let signature = generate_function_with_body(&cpu_fun, &context);
         
         // Check that the signature does NOT contain GPU attributes
         assert!(!signature.contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
@@ -838,7 +1092,7 @@ mod tests {
     fn test_function_signature_format() {
         let context = Context::new();
         let gpu_fun = make_gpu_function();
-        let signature = generate_function_signature(&gpu_fun, &context);
+        let signature = generate_function_with_body(&gpu_fun, &context);
         
         // Check that attributes appear in the correct position (after params, before brace)
         let lines: Vec<&str> = signature.lines().collect();
