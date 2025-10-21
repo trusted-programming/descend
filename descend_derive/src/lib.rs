@@ -149,12 +149,12 @@ pub fn span_derive(attr: TokenStream, input: TokenStream) -> TokenStream {
     TokenStream::from(output)
 }
 
-/// Proc macro to automatically generate tests for all .desc files in examples/simple/
+/// Proc macro to automatically generate tests for all .desc files in examples/core/
 #[proc_macro]
 pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
     // Use include_dir! to properly track filesystem dependencies
     // This ensures Cargo knows to re-run the macro when files change
-    let dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/../examples/simple");
+    let dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/../examples/core");
 
     let mut test_functions = Vec::new();
 
@@ -169,7 +169,7 @@ pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
 
                 // Use the original file path from the filesystem, not the embedded path
                 let full_path = format!(
-                    "examples/simple/{}",
+                    "examples/core/{}",
                     file.path()
                         .file_name()
                         .and_then(|s| s.to_str())
