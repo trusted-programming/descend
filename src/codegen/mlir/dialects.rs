@@ -20,9 +20,15 @@ melior::dialect! {
 melior::dialect! {
     name: "hacc",
     files: [
+        "AscendNPU-IR/third-party/llvm-project/mlir/include/mlir/Dialect/DLTI/DLTIAttrs.td",
         "AscendNPU-IR/bishengir/include/bishengir/Dialect/HACC/IR/HACCBase.td",
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/HACC/IR/HACCAttrs.td",
+        "AscendNPU-IR/bishengir/include/bishengir/Dialect/HACC/IR/HACCInterfaces.td",
     ],
-    include_directories: ["/root/descend/AscendNPU-IR/bishengir/include"],
+    include_directories: [
+        "/root/descend/AscendNPU-IR/bishengir/include",
+        "/root/descend/AscendNPU-IR/third-party/llvm-project/mlir/include",
+    ],
 }
 
 melior::dialect! {

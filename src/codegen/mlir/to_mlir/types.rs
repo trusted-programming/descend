@@ -1,10 +1,10 @@
-use crate::ast::{AtomicTy, DataTy, DataTyKind, FunDef, Memory, Nat, NatCtx, ScalarTy, Ty, TyKind};
+use crate::ast::{AtomicTy, BaseExec, DataTy, DataTyKind, FunDef, Memory, Nat, NatCtx, ScalarTy, Ty, TyKind};
 use melior::{
     dialect::func,
     ir::{
-        attribute::{StringAttribute, TypeAttribute},
+        attribute::{StringAttribute, TypeAttribute, Attribute},
         r#type::{FunctionType, IntegerType, TupleType},
-        Location, Operation, Region, Type,
+        Location, Operation, Region, Type, Identifier,
     },
     Context,
 };
@@ -21,6 +21,35 @@ fn nat_to_dimension(nat: &Nat) -> String {
         Ok(size) => size.to_string(),
         Err(_) => "?".to_string(), // Use dynamic dimension for non-literal Nat
     }
+}
+
+/// Helper function to create HACC attributes for GPU functions
+/// This function creates proper MLIR attribute objects for HACC attributes.
+/// Note: This requires the HACC dialect to be registered in the MLIR context.
+fn create_hacc_attributes<'c>(context: &'c Context) -> Vec<(Identifier<'c>, Attribute<'c>)> {
+    // Create HACC entry attribute (hacc.entry) - this is a unit attribute
+    let entry_attr = Attribute::parse(context, "unit")
+        .expect("Failed to create HACC entry attribute");
+    
+    // Create HACC function type attribute (hacc.function_kind = DEVICE)
+    // Note: This will fail if the HACC dialect is not registered in the context
+    let func_type_attr = Attribute::parse(context, "#hacc.function_kind<DEVICE>")
+        .expect("Failed to create HACC function type attribute - ensure HACC dialect is registered");
+    
+    vec![
+        (Identifier::new(context, "hacc.entry"), entry_attr),
+        (Identifier::new(context, "hacc.function_kind"), func_type_attr),
+    ]
+}
+
+/// Helper function to generate HACC attributes string for GPU functions
+/// This function generates the MLIR string representation of HACC attributes
+/// for use in string-based MLIR generation. The proper attribute objects
+/// are available through create_hacc_attributes() when the HACC dialect is registered.
+fn generate_hacc_attributes_string(context: &Context) -> String {
+    // Generate the string representation directly since we know the exact format
+    // The create_hacc_attributes() function is available for when the HACC dialect is registered
+    " attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}".to_string()
 }
 
 /// Helper function to convert ScalarTy to MLIR Type
@@ -336,12 +365,23 @@ impl ToMlir for FunDef {
         let location = Location::unknown(context);
         let function_name = &self.ident.name;
 
+        // Create attributes based on execution type
+        let attributes: Vec<(Identifier, Attribute)> = if matches!(self.exec.exec.base, BaseExec::GpuGrid(_, _)) {
+            // For GPU functions, we need to create HACC attributes
+            // Since we can't easily create HACC dialect attributes here, we'll use empty attributes
+            // The actual GPU attributes will be handled in the string-based generation path
+            vec![]
+        } else {
+            // For CPU functions, no special attributes needed
+            vec![]
+        };
+
         func::func(
             context,
             StringAttribute::new(context, function_name),
             TypeAttribute::new(function_type.into()),
             Region::new(),
-            &[],
+            &attributes,
             location,
         )
     }
@@ -375,7 +415,17 @@ fn generate_function_signature(fun: &crate::ast::FunDef, context: &Context) -> S
         signature.push_str(param_type);
     }
 
-    signature.push_str(") {\n    return\n  }\n");
+    signature.push_str(")");
+
+    // Add GPU attributes if needed
+    if matches!(fun.exec.exec.base, BaseExec::GpuGrid(_, _)) {
+        // TODO: When HACC dialect is registered in the MLIR context, replace this with:
+        // let hacc_attributes = create_hacc_attributes(context);
+        // and use the attributes with MLIR operation builders instead of string generation
+        signature.push_str(&generate_hacc_attributes_string(context));
+    }
+
+    signature.push_str(" {\n    return\n  }\n");
     signature
 }
 
@@ -680,5 +730,130 @@ mod tests {
         // Test the type string generation
         let type_str = test_at_type_string(&data_ty, &context);
         assert_eq!(type_str, "memref<16xi32>");
+    }
+
+    /// Helper function to create a minimal GPU function with GpuGrid execution context
+    fn make_gpu_function() -> FunDef {
+        use crate::ast::{Block, DataTy, DataTyKind, Dim, Dim1d, ExecExpr, ExecExprKind, Ident, ScalarTy, Span};
+        
+        FunDef {
+            ident: Ident {
+                name: "gpu_kernel".into(),
+                span: Some(Span { begin: 0, end: 10 }),
+                is_implicit: false,
+            },
+            generic_params: vec![],
+            generic_exec: None,
+            param_decls: vec![],
+            ret_dty: Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::Unit))),
+            exec: ExecExpr {
+                exec: Box::new(ExecExprKind {
+                    base: BaseExec::GpuGrid(
+                        Dim::X(Box::new(Dim1d(Nat::Lit(1)))),
+                        Dim::X(Box::new(Dim1d(Nat::Lit(16)))),
+                    ),
+                    path: vec![],
+                }),
+                ty: None,
+                span: None,
+            },
+            prv_rels: vec![],
+            body: Box::new(Block {
+                prvs: vec![],
+                body: Box::new(crate::ast::Expr {
+                    expr: crate::ast::ExprKind::Lit(crate::ast::Lit::Unit),
+                    ty: Some(Box::new(Ty {
+                        ty: TyKind::Data(Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::Unit)))),
+                        span: None,
+                    })),
+                    span: Some(Span { begin: 0, end: 0 }),
+                }),
+            }),
+        }
+    }
+
+    /// Helper function to create a minimal CPU function with CpuThread execution context
+    fn make_cpu_function() -> FunDef {
+        use crate::ast::{Block, DataTy, DataTyKind, ExecExpr, ExecExprKind, Ident, ScalarTy, Span};
+        
+        FunDef {
+            ident: Ident {
+                name: "cpu_function".into(),
+                span: Some(Span { begin: 0, end: 12 }),
+                is_implicit: false,
+            },
+            generic_params: vec![],
+            generic_exec: None,
+            param_decls: vec![],
+            ret_dty: Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::Unit))),
+            exec: ExecExpr {
+                exec: Box::new(ExecExprKind {
+                    base: BaseExec::CpuThread,
+                    path: vec![],
+                }),
+                ty: None,
+                span: None,
+            },
+            prv_rels: vec![],
+            body: Box::new(Block {
+                prvs: vec![],
+                body: Box::new(crate::ast::Expr {
+                    expr: crate::ast::ExprKind::Lit(crate::ast::Lit::Unit),
+                    ty: Some(Box::new(Ty {
+                        ty: TyKind::Data(Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::Unit)))),
+                        span: None,
+                    })),
+                    span: Some(Span { begin: 0, end: 0 }),
+                }),
+            }),
+        }
+    }
+
+    #[test]
+    fn test_gpu_function_signature_with_attributes() {
+        let context = Context::new();
+        let gpu_fun = make_gpu_function();
+        let signature = generate_function_signature(&gpu_fun, &context);
+        
+        // Check that the signature contains the GPU attributes
+        assert!(signature.contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
+        assert!(signature.contains("func.func @gpu_kernel"));
+        assert!(signature.contains(") attributes"));
+    }
+
+    #[test]
+    fn test_cpu_function_signature_without_attributes() {
+        let context = Context::new();
+        let cpu_fun = make_cpu_function();
+        let signature = generate_function_signature(&cpu_fun, &context);
+        
+        // Check that the signature does NOT contain GPU attributes
+        assert!(!signature.contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
+        assert!(signature.contains("func.func @cpu_function"));
+        assert!(signature.contains(") {"));
+        assert!(!signature.contains(") attributes"));
+    }
+
+    #[test]
+    fn test_function_signature_format() {
+        let context = Context::new();
+        let gpu_fun = make_gpu_function();
+        let signature = generate_function_signature(&gpu_fun, &context);
+        
+        // Check that attributes appear in the correct position (after params, before brace)
+        let lines: Vec<&str> = signature.lines().collect();
+        
+        // The function signature should have 3 lines: func declaration, return, closing brace
+        assert_eq!(lines.len(), 3);
+        
+        let func_line = lines[0]; // First line should be the function declaration
+        assert!(func_line.contains("func.func @gpu_kernel"));
+        assert!(func_line.contains(") attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>} {"));
+        
+        // Verify the structure: function_name() attributes { ... } {
+        let parts: Vec<&str> = func_line.split(") attributes").collect();
+        assert_eq!(parts.len(), 2);
+        assert!(parts[0].contains("@gpu_kernel"));
+        assert!(parts[1].starts_with(" {hacc.entry"));
     }
 }

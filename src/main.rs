@@ -11,7 +11,7 @@ struct Args {
     descend_file: PathBuf,
 
     /// Backend to use (cuda or mlir)
-    #[arg(value_enum, default_value = "cuda")]
+    #[arg(value_enum, default_value = "mlir")]
     backend: BackendArg,
 
     /// Output directory (optional, default is current directory)
