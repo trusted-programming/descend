@@ -1,3 +1,39 @@
+//! MLIR Builder Module
+//!
+//! This module provides the core MLIR code generation functionality, including
+//! the main `MlirBuilder` struct and methods for building MLIR modules, functions,
+//! and expressions from Descend AST nodes.
+//!
+//! # Architecture
+//!
+//! The builder uses a two-pass compilation strategy:
+//! 1. **Pass 1**: Declare all functions and record their result types
+//! 2. **Pass 2**: Build function bodies with access to callee result types
+//!
+//! This approach ensures that function calls can reference the correct result types
+//! of their callees, enabling proper MLIR generation.
+//!
+//! # Key Components
+//!
+//! - `MlirBuilder`: Main builder struct that manages MLIR module construction
+//! - `MlirContext`: Context for managing variables and current block during codegen
+//! - Function building: Converts Descend function definitions to MLIR functions
+//! - Expression building: Handles various expression types (literals, operations, control flow)
+//!
+//! # Usage
+//!
+//! ```rust,no_run
+//! use descend::codegen::mlir::builder::MlirBuilder;
+//! use melior::{Context, ir::{Module, Location}};
+//!
+//! let context = Context::new();
+//! let module = Module::new(Location::unknown(&context));
+//! let mut builder = MlirBuilder::new(&context, module);
+//!
+//! // Build compilation unit (requires proper comp_unit)
+//! // builder.build_items_two_pass(&comp_unit);
+//! ```
+
 pub mod context;
 pub mod control_flow;
 pub mod expr;
@@ -9,7 +45,7 @@ pub mod place;
 
 use melior::{
     dialect::func,
-    ir::{operation::OperationLike, Block, BlockLike, Module, RegionLike, Location},
+    ir::{operation::OperationLike, Block, BlockLike, Location, Module, RegionLike},
     Context,
 };
 
@@ -17,7 +53,6 @@ use super::to_mlir::ToMlir;
 use crate::ast as desc;
 use melior::ir::Type;
 use std::collections::HashMap;
-
 // Re-export the main types and functions
 pub use context::MlirContext;
 pub use expr::build_expr;
@@ -79,18 +114,16 @@ impl<'ctx> MlirBuilder<'ctx> {
         // Bind function parameters to block arguments
         for (i, param) in fun.param_decls.iter().enumerate() {
             if let Some(arg) = mlir_ctx.current_block.argument(i).ok().map(|a| a.into()) {
-                mlir_ctx
-                    .variables
-                    .insert(param.ident.name.to_string(), arg);
+                mlir_ctx.variables.insert(param.ident.name.to_string(), arg);
             }
         }
 
         // Build the function body expression using the context
-        let result_value = build_expr(&fun.body.body, &mut mlir_ctx);
+        let result_value = build_expr(&fun.body.body, &mut mlir_ctx).ok();
 
         // Add return statement using the result value
         let location = mlir_ctx.location();
-        if let Some(value) = result_value {
+        if let Some(Some(value)) = result_value {
             let return_op = func::r#return(&[value], location);
             entry_block.append_operation(return_op);
         } else {
@@ -103,7 +136,14 @@ impl<'ctx> MlirBuilder<'ctx> {
     /// Build all functions in two passes so that calls can reference result types
     pub fn build_items_two_pass(&mut self, comp: &desc::CompilUnit) {
         // Pass 1: declare all functions and record result types
-        let mut results_map: HashMap<String, Vec<Type<'_>>> = HashMap::new();
+        // Pre-allocate HashMap with estimated capacity
+        let function_count = comp
+            .items
+            .iter()
+            .filter(|item| matches!(item, desc::Item::FunDef(_)))
+            .count();
+        let mut results_map: HashMap<String, Vec<Type<'_>>> =
+            HashMap::with_capacity(function_count);
 
         // Keep handles to the appended ops to reuse their regions
         let mut fun_ops = Vec::new();
@@ -115,7 +155,11 @@ impl<'ctx> MlirBuilder<'ctx> {
 
                 // Derive result types directly from AST return data type
                 let ret_ty = fun.ret_dty.to_mlir(self.context);
-                let res_types: Vec<Type<'_>> = if ret_ty.to_string() == "none" { vec![] } else { vec![ret_ty] };
+                let res_types: Vec<Type<'_>> = if ret_ty.to_string() == "none" {
+                    vec![]
+                } else {
+                    vec![ret_ty]
+                };
                 results_map.insert(fun.ident.name.to_string(), res_types);
 
                 fun_ops.push((fun.ident.name.to_string(), op_ref, fun));
@@ -143,9 +187,9 @@ impl<'ctx> MlirBuilder<'ctx> {
                     ctx.variables.insert(param.ident.name.to_string(), arg);
                 }
             }
-            let result_value = build_expr(&fun.body.body, &mut ctx);
+            let result_value = build_expr(&fun.body.body, &mut ctx).ok();
             let location = ctx.location();
-            if let Some(value) = result_value {
+            if let Some(Some(value)) = result_value {
                 let return_op = func::r#return(&[value], location);
                 entry_block.append_operation(return_op);
             } else {

@@ -155,26 +155,30 @@ pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
     // Use include_dir! to properly track filesystem dependencies
     // This ensures Cargo knows to re-run the macro when files change
     let dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/../examples/simple");
-    
+
     let mut test_functions = Vec::new();
-    
+
     for file in dir.files() {
         if let Some(extension) = file.path().extension() {
             if extension == "desc" {
-                let file_name = file.path()
+                let file_name = file
+                    .path()
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("unknown");
-                
+
                 // Use the original file path from the filesystem, not the embedded path
-                let full_path = format!("examples/simple/{}", file.path()
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown.desc"));
-                
+                let full_path = format!(
+                    "examples/simple/{}",
+                    file.path()
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown.desc")
+                );
+
                 // Convert file name to valid Rust identifier
                 let test_name = file_name.replace("-", "_").replace(".", "_");
-                
+
                 // Handle Rust keywords and match existing snapshot names
                 let test_name = match test_name.as_str() {
                     "if" => "if_only".to_string(),
@@ -198,10 +202,10 @@ pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
                     "test_no_main" => "no_main".to_string(),
                     _ => test_name,
                 };
-                
+
                 let test_name_ident = Ident::new(&test_name, proc_macro2::Span::call_site());
                 let file_path_lit = proc_macro2::Literal::string(&full_path);
-                
+
                 test_functions.push(quote! {
                     #[test]
                     fn #test_name_ident() -> Result<(), descend::error::ErrorReported> {
@@ -213,7 +217,7 @@ pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
             }
         }
     }
-    
+
     TokenStream::from(quote! {
         #(#test_functions)*
     })

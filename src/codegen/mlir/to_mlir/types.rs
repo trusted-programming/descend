@@ -45,7 +45,10 @@ fn ident_to_mlir<'c>(ident: &crate::ast::Ident, context: &'c Context) -> Type<'c
         "i16" => IntegerType::new(context, 16).into(),
         "i8" => IntegerType::new(context, 8).into(),
         "u16" => IntegerType::new(context, 16).into(),
-        _ => unimplemented!("Type identifier '{}' not yet supported in MLIR conversion", ident.name)
+        _ => unimplemented!(
+            "Type identifier '{}' not yet supported in MLIR conversion",
+            ident.name
+        ),
     }
 }
 
@@ -54,13 +57,24 @@ fn apply_hivm_address_space(base_str: String, mem: &Memory) -> String {
     if base_str.starts_with("memref<") {
         match mem {
             Memory::GpuGlobal | Memory::GpuShared => {
-                base_str.replacen(">", ", #hivm.address_space<gm>>", 1)
-            },
+                // Use replace_range for better performance than replacen
+                let mut result = base_str;
+                if let Some(pos) = result.rfind('>') {
+                    result.insert_str(pos, ", #hivm.address_space<gm>");
+                }
+                result
+            }
             Memory::GpuLocal => {
-                base_str.replacen(">", ", #hivm.address_space<ub>>", 1)
-            },
+                let mut result = base_str;
+                if let Some(pos) = result.rfind('>') {
+                    result.insert_str(pos, ", #hivm.address_space<ub>");
+                }
+                result
+            }
             Memory::CpuMem => base_str,
-            Memory::Ident(_) => panic!("Generic memory parameters should be resolved before MLIR codegen"),
+            Memory::Ident(_) => {
+                panic!("Generic memory parameters should be resolved before MLIR codegen")
+            }
         }
     } else {
         base_str
@@ -68,7 +82,11 @@ fn apply_hivm_address_space(base_str: String, mem: &Memory) -> String {
 }
 
 /// Helper function to safely parse MLIR type with HIVM address space, falling back to base type if HIVM dialect is not available
-fn parse_type_with_hivm_fallback<'c>(context: &'c Context, final_str: String, base_type: Type<'c>) -> Type<'c> {
+fn parse_type_with_hivm_fallback<'c>(
+    context: &'c Context,
+    final_str: String,
+    base_type: Type<'c>,
+) -> Type<'c> {
     // Check if the final string contains HIVM dialect attributes
     if final_str.contains("#hivm.address_space") {
         // Since HIVM dialect is not registered, return the base type to avoid error messages
@@ -93,9 +111,9 @@ fn data_ty_to_element_type<'c>(data_ty: &DataTy, context: &'c Context) -> Type<'
 fn ref_scalar_to_mlir<'c>(scalar_ty: &ScalarTy, mem: &Memory, context: &'c Context) -> Type<'c> {
     // Scalar reference -> rank-0 memref
     let elem_type = scalar_ty_to_mlir(scalar_ty, context);
-    let memref_str = format!("memref<{}>", elem_type.to_string());
+    let memref_str = format!("memref<{}>", elem_type);
     let base_type = Type::parse(context, &memref_str).expect("Failed to parse rank-0 memref type");
-    
+
     // Add HIVM address space if needed
     let base_str = base_type.to_string();
     let final_str = apply_hivm_address_space(base_str, mem);
@@ -103,13 +121,18 @@ fn ref_scalar_to_mlir<'c>(scalar_ty: &ScalarTy, mem: &Memory, context: &'c Conte
 }
 
 /// Helper function to convert array reference to MLIR type
-fn ref_array_to_mlir<'c>(elem_ty: &DataTy, size: &Nat, mem: &Memory, context: &'c Context) -> Type<'c> {
+fn ref_array_to_mlir<'c>(
+    elem_ty: &DataTy,
+    size: &Nat,
+    mem: &Memory,
+    context: &'c Context,
+) -> Type<'c> {
     // Array reference -> memref with dimensions
     let elem_type = data_ty_to_element_type(elem_ty, context);
     let dim = nat_to_dimension(size);
-    let memref_str = format!("memref<{}x{}>", dim, elem_type.to_string());
+    let memref_str = format!("memref<{}x{}>", dim, elem_type);
     let base_type = Type::parse(context, &memref_str).expect("Failed to parse array memref type");
-    
+
     // Add HIVM address space if needed
     let base_str = base_type.to_string();
     let final_str = apply_hivm_address_space(base_str, mem);
@@ -122,15 +145,15 @@ fn ref_at_to_mlir<'c>(inner: &DataTy, mem: &Memory, context: &'c Context) -> Typ
     let base_type = match &inner.dty {
         DataTyKind::Scalar(scalar_ty) => {
             let elem_type = scalar_ty_to_mlir(scalar_ty, context);
-            let memref_str = format!("memref<{}>", elem_type.to_string());
+            let memref_str = format!("memref<{}>", elem_type);
             Type::parse(context, &memref_str).expect("Failed to parse scalar memref type")
-        },
+        }
         DataTyKind::Array(elem_ty, size) | DataTyKind::ArrayShape(elem_ty, size) => {
             let elem_type = elem_ty.to_mlir(context);
             let dim = nat_to_dimension(size);
-            let memref_str = format!("memref<{}x{}>", dim, elem_type.to_string());
+            let memref_str = format!("memref<{}x{}>", dim, elem_type);
             Type::parse(context, &memref_str).expect("Failed to parse array memref type")
-        },
+        }
         DataTyKind::Tuple(_) => {
             unimplemented!("Tuple references with At not yet supported in MLIR conversion")
         }
@@ -138,7 +161,9 @@ fn ref_at_to_mlir<'c>(inner: &DataTy, mem: &Memory, context: &'c Context) -> Typ
             unimplemented!("Struct references with At not yet supported in MLIR conversion")
         }
         DataTyKind::Ident(_) => {
-            unimplemented!("Type identifier references with At not yet supported in MLIR conversion")
+            unimplemented!(
+                "Type identifier references with At not yet supported in MLIR conversion"
+            )
         }
         DataTyKind::Atomic(_) => {
             unimplemented!("Atomic references with At not yet supported in MLIR conversion")
@@ -166,19 +191,13 @@ fn ref_at_to_mlir<'c>(inner: &DataTy, mem: &Memory, context: &'c Context) -> Typ
 fn get_mlir_type_string_with_address_space(ty: &Ty, context: &Context) -> String {
     let base_type = ty.to_mlir(context);
     let base_str = base_type.to_string();
-    
+
     // Check if this is a DataTy with At type or Ref type with GPU memory
     match &ty.ty {
-        TyKind::Data(data_ty) => {
-            match &data_ty.dty {
-                DataTyKind::At(_, mem) => {
-                    apply_hivm_address_space(base_str, mem)
-                },
-                DataTyKind::Ref(ref_dty) => {
-                    apply_hivm_address_space(base_str, &ref_dty.mem)
-                },
-                _ => base_str,
-            }
+        TyKind::Data(data_ty) => match &data_ty.dty {
+            DataTyKind::At(_, mem) => apply_hivm_address_space(base_str, mem),
+            DataTyKind::Ref(ref_dty) => apply_hivm_address_space(base_str, &ref_dty.mem),
+            _ => base_str,
         },
         _ => base_str,
     }
@@ -195,27 +214,25 @@ impl ToMlir for DataTy {
                 AtomicTy::AtomicI32 => IntegerType::new(context, 32).into(),
             },
             DataTyKind::Tuple(elem_tys) => {
-                let elem_types: Vec<Type<'c>> = elem_tys
-                    .iter()
-                    .map(|ty| ty.to_mlir(context))
-                    .collect();
+                let elem_types: Vec<Type<'c>> =
+                    elem_tys.iter().map(|ty| ty.to_mlir(context)).collect();
                 TupleType::new(context, &elem_types).into()
-            },
+            }
             DataTyKind::Ident(ident) => ident_to_mlir(ident, context),
             DataTyKind::Array(elem_ty, size) => {
                 let elem_type = elem_ty.to_mlir(context);
                 let dim = nat_to_dimension(size);
-                let memref_str = format!("memref<{}x{}>", dim, elem_type.to_string());
+                let memref_str = format!("memref<{}x{}>", dim, elem_type);
                 Type::parse(context, &memref_str).expect("Failed to parse memref type")
-            },
+            }
             DataTyKind::ArrayShape(elem_ty, size) => {
                 // ArrayShape is similar to Array but may have different semantics
                 // For now, treat it the same as Array using memref
                 let elem_type = elem_ty.to_mlir(context);
                 let dim = nat_to_dimension(size);
-                let memref_str = format!("memref<{}x{}>", dim, elem_type.to_string());
+                let memref_str = format!("memref<{}x{}>", dim, elem_type);
                 Type::parse(context, &memref_str).expect("Failed to parse memref type")
-            },
+            }
             DataTyKind::Struct(_) => {
                 unimplemented!("Struct types not yet supported in MLIR conversion")
             }
@@ -227,19 +244,19 @@ impl ToMlir for DataTy {
                 // Since HIVM dialect is not registered, we need to create the type manually
                 // by parsing the base type and then manually constructing the final type
                 parse_type_with_hivm_fallback(context, final_str, base_type)
-            },
+            }
             DataTyKind::Ref(ref_dty) => {
                 // Convert the inner DataTy to MLIR based on its kind
                 match &ref_dty.dty.dty {
                     DataTyKind::Scalar(scalar_ty) => {
                         ref_scalar_to_mlir(scalar_ty, &ref_dty.mem, context)
-                    },
+                    }
                     DataTyKind::Array(elem_ty, size) => {
                         ref_array_to_mlir(elem_ty, size, &ref_dty.mem, context)
-                    },
+                    }
                     DataTyKind::ArrayShape(elem_ty, size) => {
                         ref_array_to_mlir(elem_ty, size, &ref_dty.mem, context)
-                    },
+                    }
                     DataTyKind::Tuple(_) => {
                         unimplemented!("Tuple references not yet supported in MLIR conversion")
                     }
@@ -247,31 +264,33 @@ impl ToMlir for DataTy {
                         unimplemented!("Struct references not yet supported in MLIR conversion")
                     }
                     DataTyKind::Ident(_) => {
-                        unimplemented!("Type identifier references not yet supported in MLIR conversion")
+                        unimplemented!(
+                            "Type identifier references not yet supported in MLIR conversion"
+                        )
                     }
                     DataTyKind::Atomic(_) => {
                         unimplemented!("Atomic references not yet supported in MLIR conversion")
                     }
-                    DataTyKind::At(inner, mem) => {
-                        ref_at_to_mlir(inner, mem, context)
-                    },
+                    DataTyKind::At(inner, mem) => ref_at_to_mlir(inner, mem, context),
                     DataTyKind::Ref(_) => {
                         unimplemented!("Nested references not yet supported in MLIR conversion")
                     }
                     DataTyKind::RawPtr(_) => {
-                        unimplemented!("Raw pointer references not yet supported in MLIR conversion")
+                        unimplemented!(
+                            "Raw pointer references not yet supported in MLIR conversion"
+                        )
                     }
                     DataTyKind::Dead(_) => {
                         unimplemented!("Dead type references not yet supported in MLIR conversion")
                     }
                 }
-            },
+            }
             DataTyKind::RawPtr(_) => {
                 unimplemented!("Raw pointer types not yet supported in MLIR conversion")
-            },
+            }
             DataTyKind::Dead(_) => {
                 unimplemented!("Dead types not yet supported in MLIR conversion")
-            },
+            }
         }
     }
 }
@@ -328,41 +347,62 @@ impl ToMlir for FunDef {
     }
 }
 
+/// Generate function signature with HIVM address spaces
+fn generate_function_signature(fun: &crate::ast::FunDef, context: &Context) -> String {
+    // Pre-allocate with estimated capacity to avoid reallocations
+    let estimated_capacity = 50 + fun.ident.name.len() + fun.param_decls.len() * 20;
+    let mut signature = String::with_capacity(estimated_capacity);
+
+    signature.push_str("  func.func @");
+    signature.push_str(&fun.ident.name);
+    signature.push('(');
+
+    // Generate parameter types with HIVM address spaces
+    let param_types: Vec<String> = fun
+        .param_decls
+        .iter()
+        .filter_map(|param| param.ty.as_ref())
+        .map(|ty| get_mlir_type_string_with_address_space(ty, context))
+        .collect();
+
+    for (i, param_type) in param_types.iter().enumerate() {
+        if i > 0 {
+            signature.push_str(", ");
+        }
+        signature.push_str("%arg");
+        signature.push_str(&i.to_string());
+        signature.push_str(": ");
+        signature.push_str(param_type);
+    }
+
+    signature.push_str(") {\n    return\n  }\n");
+    signature
+}
+
 /// Custom function to generate MLIR string with HIVM address spaces
 pub fn generate_mlir_string_with_hivm(comp_unit: &crate::ast::CompilUnit) -> String {
     let context = crate::codegen::mlir::create_context();
-    let mut result = String::new();
+
+    // Pre-allocate with estimated capacity
+    let function_count = comp_unit
+        .items
+        .iter()
+        .filter(|item| matches!(item, crate::ast::Item::FunDef(_)))
+        .count();
+    let estimated_capacity = 20 + function_count * 100; // Rough estimate
+    let mut result = String::with_capacity(estimated_capacity);
+
     result.push_str("module {\n");
-    
+
     for item in &comp_unit.items {
         if let crate::ast::Item::FunDef(fun) = item {
-            result.push_str(&format!("  func.func @{}(", fun.ident.name));
-            
-            // Generate parameter types with HIVM address spaces
-            let param_types: Vec<String> = fun
-                .param_decls
-                .iter()
-                .filter_map(|param| param.ty.as_ref())
-                .map(|ty| get_mlir_type_string_with_address_space(ty, &context))
-                .collect();
-            
-            for (i, param_type) in param_types.iter().enumerate() {
-                if i > 0 {
-                    result.push_str(", ");
-                }
-                result.push_str(&format!("%arg{}: {}", i, param_type));
-            }
-            
-            result.push_str(") {\n");
-            result.push_str("    return\n");
-            result.push_str("  }\n");
+            result.push_str(&generate_function_signature(fun, &context));
         }
     }
-    
+
     result.push_str("}\n");
     result
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -622,7 +662,7 @@ mod tests {
             Nat::Lit(16),
         ));
         let data_ty = make_data_ty(DataTyKind::At(Box::new(inner), Memory::GpuGlobal));
-        
+
         // Test the type string generation (avoids HIVM dialect registration issues)
         let type_str = test_at_type_string(&data_ty, &context);
         assert_eq!(type_str, "memref<16xi32, #hivm.address_space<gm>>");
@@ -636,7 +676,7 @@ mod tests {
             Nat::Lit(16),
         ));
         let data_ty = make_data_ty(DataTyKind::At(Box::new(inner), Memory::CpuMem));
-        
+
         // Test the type string generation
         let type_str = test_at_type_string(&data_ty, &context);
         assert_eq!(type_str, "memref<16xi32>");

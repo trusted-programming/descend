@@ -3,6 +3,7 @@ use melior::{
     ir::{Block, BlockLike, Location, Region, RegionLike, Type, Value, ValueLike},
 };
 
+use super::super::error::MlirError;
 use super::context::{create_index_constant, MlirContext};
 use super::expr::build_expr;
 use super::nat::build_nat;
@@ -14,7 +15,7 @@ pub fn build_for_nat<'ctx, 'a, 'b>(
     range: &desc::NatRange,
     body: &desc::Expr,
     ctx: &mut MlirContext<'ctx, 'a, 'b>,
-) -> Option<Value<'a, 'b>>
+) -> Result<Option<Value<'a, 'b>>, MlirError>
 where
     'ctx: 'a,
 {
@@ -26,16 +27,22 @@ where
     match range {
         NatRange::Simple { lower, upper } => {
             // Build lower and upper bound values
-            let lower_value = build_nat(lower, ctx)?;
-            let upper_value = build_nat(upper, ctx)?;
+            let lower_value = build_nat(lower, ctx)?.ok_or_else(|| {
+                MlirError::General("Missing lower bound for for-nat loop".to_string())
+            })?;
+            let upper_value = build_nat(upper, ctx)?.ok_or_else(|| {
+                MlirError::General("Missing upper bound for for-nat loop".to_string())
+            })?;
 
             // Create step constant (always 1 for simple range)
-            let step_value = create_index_constant(ctx, 1);
+            let step_value = create_index_constant(ctx, 1)?;
 
             // Collect current variable values that will be loop-carried (iter_args)
             // We need to pass them as operands and receive updated values after the loop
             let parent_variables = ctx.variables.clone();
             let iter_arg_names: Vec<String> = parent_variables.keys().cloned().collect();
+
+            // Pre-allocate vectors with known capacity to avoid reallocations
             let iter_arg_values: Vec<Value> = iter_arg_names
                 .iter()
                 .filter_map(|name| parent_variables.get(name).copied())
@@ -67,7 +74,7 @@ where
             }
 
             // Build the loop body expression
-            let _body_value = build_expr(body, ctx);
+            let _body_value = build_expr(body, ctx)?;
 
             // Collect the updated values to yield
             let yield_values: Vec<Value> = iter_arg_names
@@ -107,7 +114,7 @@ where
             ctx.variables.remove(&ident.name.to_string());
 
             // ForNat loops don't produce a value themselves
-            None
+            Ok(None)
         }
         NatRange::Halved { .. } => {
             unimplemented!("Halved range not yet supported in MLIR backend")

@@ -3,7 +3,7 @@ extern crate core;
 use crate::error::ErrorReported;
 
 mod ast;
-mod codegen;
+pub mod codegen;
 pub mod error;
 pub mod parser;
 pub mod ty_check;
