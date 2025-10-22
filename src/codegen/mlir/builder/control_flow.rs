@@ -100,7 +100,7 @@ where
     let (then_region, true_value) = build_branch_region(case_true, ctx, build_expr)?;
 
     // Build the else region
-    let (else_region, false_value) = build_branch_region(case_false, ctx, build_expr)?;
+    let (else_region, _false_value) = build_branch_region(case_false, ctx, build_expr)?;
 
     // Determine result types based on whether branches produce values
     let result_types: Vec<Type> = if let Some(val) = true_value {

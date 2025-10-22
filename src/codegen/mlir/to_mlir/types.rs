@@ -1,10 +1,13 @@
-use crate::ast::{AtomicTy, BaseExec, DataTy, DataTyKind, FunDef, Memory, Nat, NatCtx, ScalarTy, Ty, TyKind};
+use crate::ast::{
+    AtomicTy, BaseExec, DataTy, DataTyKind, FunDef, Memory, Nat, NatCtx, Ownership, ScalarTy, Ty,
+    TyKind,
+};
 use melior::{
     dialect::func,
     ir::{
-        attribute::{StringAttribute, TypeAttribute, Attribute},
-        r#type::{FunctionType, IntegerType, TupleType},
-        Location, Operation, Region, Type, Identifier,
+        attribute::{Attribute, StringAttribute, TypeAttribute},
+        r#type::{FunctionType, IntegerType, MemRefType, TupleType},
+        Identifier, Location, Operation, Region, Type,
     },
     Context,
 };
@@ -13,71 +16,81 @@ pub trait ToMlir {
     fn to_mlir<'c>(&self, context: &'c Context) -> Self::Output<'c>;
 }
 
-/// Helper function to convert Nat to a dimension string for MLIR types
-fn nat_to_dimension(nat: &Nat) -> String {
-    // Try to evaluate the Nat with an empty context
-    let nat_ctx = NatCtx::new();
-    match nat.eval(&nat_ctx) {
-        Ok(size) => size.to_string(),
-        Err(_) => "?".to_string(), // Use dynamic dimension for non-literal Nat
+impl Nat {
+    fn to_dimension_i64(self: &Self) -> i64 {
+        // Try to evaluate the Nat with an empty context
+        let nat_ctx = NatCtx::new();
+        match self.eval(&nat_ctx) {
+            Ok(size) => size as i64,
+            Err(_) => panic!(
+                "Array dimensions must be compile-time known. Dynamic arrays are not supported."
+            ),
+        }
     }
 }
 
-/// Helper function to create HACC attributes for GPU functions
-/// This function creates proper MLIR attribute objects for HACC attributes.
-/// Note: This requires the HACC dialect to be registered in the MLIR context.
-fn create_hacc_attributes<'c>(context: &'c Context) -> Vec<(Identifier<'c>, Attribute<'c>)> {
-    // Create HACC entry attribute (hacc.entry) - this is a unit attribute
-    let entry_attr = Attribute::parse(context, "unit")
-        .expect("Failed to create HACC entry attribute");
-    
-    // Create HACC function type attribute (hacc.function_kind = DEVICE)
-    // Note: This will fail if the HACC dialect is not registered in the context
-    let func_type_attr = Attribute::parse(context, "#hacc.function_kind<DEVICE>")
-        .expect("Failed to create HACC function type attribute - ensure HACC dialect is registered");
-    
-    vec![
-        (Identifier::new(context, "hacc.entry"), entry_attr),
-        (Identifier::new(context, "hacc.function_kind"), func_type_attr),
-    ]
-}
+impl ToMlir for ScalarTy {
+    type Output<'c> = Type<'c>;
 
-/// Helper function to generate HACC attributes string for GPU functions
-/// This function generates the MLIR string representation of HACC attributes
-/// for use in string-based MLIR generation. The proper attribute objects
-/// are available through create_hacc_attributes() when the HACC dialect is registered.
-fn generate_hacc_attributes_string(context: &Context) -> String {
-    // Generate the string representation directly since we know the exact format
-    // The create_hacc_attributes() function is available for when the HACC dialect is registered
-    " attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}".to_string()
-}
-
-/// Helper function to convert ScalarTy to MLIR Type
-fn scalar_ty_to_mlir<'c>(scalar_ty: &ScalarTy, context: &'c Context) -> Type<'c> {
-    match scalar_ty {
-        ScalarTy::Unit => Type::parse(context, "none").expect("Failed to parse none type"),
-        ScalarTy::U8 => IntegerType::new(context, 8).into(),
-        ScalarTy::U32 => IntegerType::new(context, 32).into(),
-        ScalarTy::U64 => IntegerType::new(context, 64).into(),
-        ScalarTy::I32 => IntegerType::new(context, 32).into(),
-        ScalarTy::I64 => IntegerType::new(context, 64).into(),
-        ScalarTy::F32 => Type::parse(context, "f32").expect("Failed to parse f32 type"),
-        ScalarTy::F64 => Type::parse(context, "f64").expect("Failed to parse f64 type"),
-        ScalarTy::Bool => IntegerType::new(context, 1).into(),
-        ScalarTy::Gpu => IntegerType::new(context, 32).into(), // this will be ignored in the MLIR backend
+    fn to_mlir<'c>(&self, context: &'c Context) -> Type<'c> {
+        match self {
+            ScalarTy::Unit => Type::none(context),
+            ScalarTy::U8 => Type::from(IntegerType::new(context, 8)),
+            ScalarTy::U32 => IntegerType::new(context, 32).into(),
+            ScalarTy::U64 => IntegerType::new(context, 64).into(),
+            ScalarTy::I32 => IntegerType::new(context, 32).into(),
+            ScalarTy::I64 => IntegerType::new(context, 64).into(),
+            ScalarTy::F32 => Type::float32(context),
+            ScalarTy::F64 => Type::float64(context),
+            ScalarTy::Bool => IntegerType::new(context, 1).into(),
+            ScalarTy::Gpu => IntegerType::new(context, 32).into(), // this will be ignored in the MLIR backend
+        }
     }
 }
 
-/// Helper function to convert DataTyKind::Ident to MLIR Type
-fn ident_to_mlir<'c>(ident: &crate::ast::Ident, context: &'c Context) -> Type<'c> {
-    match ident.name.as_ref() {
-        "i16" => IntegerType::new(context, 16).into(),
-        "i8" => IntegerType::new(context, 8).into(),
-        "u16" => IntegerType::new(context, 16).into(),
-        _ => unimplemented!(
-            "Type identifier '{}' not yet supported in MLIR conversion",
-            ident.name
-        ),
+impl ScalarTy {
+    /// Convert scalar reference to MLIR memref type with address space
+    pub fn to_mlir_ref<'c>(&self, mem: &Memory, context: &'c Context) -> Type<'c> {
+        // Scalar reference -> rank-0 memref
+        let elem_type = self.to_mlir(context);
+        let memref_str = format!("memref<{}>", elem_type);
+        let base_type =
+            Type::parse(context, &memref_str).expect("Failed to parse rank-0 memref type");
+
+        // Add HIVM address space if needed
+        let base_str = base_type.to_string();
+        let final_str = apply_hivm_address_space(base_str, mem);
+        parse_type_with_hivm_fallback(context, final_str, base_type)
+    }
+}
+
+impl ToMlir for crate::ast::Ident {
+    type Output<'c> = Type<'c>;
+
+    fn to_mlir<'c>(&self, context: &'c Context) -> Type<'c> {
+        match self.name.as_ref() {
+            "i16" => IntegerType::new(context, 16).into(),
+            "i8" => IntegerType::new(context, 8).into(),
+            "u16" => IntegerType::new(context, 16).into(),
+            _ => unimplemented!(
+                "Type identifier '{}' not yet supported in MLIR conversion",
+                self.name
+            ),
+        }
+    }
+}
+
+/// Helper function to map BinOp to HIVM operation names
+fn binop_to_hivm_operation(binop: &crate::ast::BinOp) -> &'static str {
+    match binop {
+        crate::ast::BinOp::Add => "hivm.hir.vadd",
+        crate::ast::BinOp::Sub => unimplemented!("HIVM dialect does not have vsub operation - subtraction not supported in HIVM vector operations"),
+        crate::ast::BinOp::Mul => "hivm.hir.vmul",
+        crate::ast::BinOp::Div => "hivm.hir.vdiv",
+        crate::ast::BinOp::Mod => "hivm.hir.vmod",
+        // For now, only support arithmetic operations
+        // Other operations (comparisons, logical, bitwise) can be added later
+        _ => unimplemented!("HIVM operation for {:?} not yet implemented", binop),
     }
 }
 
@@ -127,28 +140,6 @@ fn parse_type_with_hivm_fallback<'c>(
     }
 }
 
-/// Helper function to convert DataTy to element type for arrays/memrefs
-fn data_ty_to_element_type<'c>(data_ty: &DataTy, context: &'c Context) -> Type<'c> {
-    match &data_ty.dty {
-        DataTyKind::Scalar(scalar_ty) => scalar_ty_to_mlir(scalar_ty, context),
-        DataTyKind::Ident(ident) => ident_to_mlir(ident, context),
-        _ => data_ty.to_mlir(context), // Fallback to full conversion for complex types
-    }
-}
-
-/// Helper function to convert scalar reference to MLIR type
-fn ref_scalar_to_mlir<'c>(scalar_ty: &ScalarTy, mem: &Memory, context: &'c Context) -> Type<'c> {
-    // Scalar reference -> rank-0 memref
-    let elem_type = scalar_ty_to_mlir(scalar_ty, context);
-    let memref_str = format!("memref<{}>", elem_type);
-    let base_type = Type::parse(context, &memref_str).expect("Failed to parse rank-0 memref type");
-
-    // Add HIVM address space if needed
-    let base_str = base_type.to_string();
-    let final_str = apply_hivm_address_space(base_str, mem);
-    parse_type_with_hivm_fallback(context, final_str, base_type)
-}
-
 /// Helper function to convert array reference to MLIR type
 fn ref_array_to_mlir<'c>(
     elem_ty: &DataTy,
@@ -157,10 +148,9 @@ fn ref_array_to_mlir<'c>(
     context: &'c Context,
 ) -> Type<'c> {
     // Array reference -> memref with dimensions
-    let elem_type = data_ty_to_element_type(elem_ty, context);
-    let dim = nat_to_dimension(size);
-    let memref_str = format!("memref<{}x{}>", dim, elem_type);
-    let base_type = Type::parse(context, &memref_str).expect("Failed to parse array memref type");
+    let elem_type = elem_ty.to_mlir(context);
+    let dim = size.to_dimension_i64();
+    let base_type: Type<'c> = MemRefType::new(elem_type, &[dim], None, None).into();
 
     // Add HIVM address space if needed
     let base_str = base_type.to_string();
@@ -173,15 +163,14 @@ fn ref_at_to_mlir<'c>(inner: &DataTy, mem: &Memory, context: &'c Context) -> Typ
     // Build base memref type from the inner data type, then append address space if needed
     let base_type = match &inner.dty {
         DataTyKind::Scalar(scalar_ty) => {
-            let elem_type = scalar_ty_to_mlir(scalar_ty, context);
+            let elem_type = scalar_ty.to_mlir(context);
             let memref_str = format!("memref<{}>", elem_type);
             Type::parse(context, &memref_str).expect("Failed to parse scalar memref type")
         }
         DataTyKind::Array(elem_ty, size) | DataTyKind::ArrayShape(elem_ty, size) => {
             let elem_type = elem_ty.to_mlir(context);
-            let dim = nat_to_dimension(size);
-            let memref_str = format!("memref<{}x{}>", dim, elem_type);
-            Type::parse(context, &memref_str).expect("Failed to parse array memref type")
+            let dim = size.to_dimension_i64();
+            MemRefType::new(elem_type, &[dim], None, None).into()
         }
         DataTyKind::Tuple(_) => {
             unimplemented!("Tuple references with At not yet supported in MLIR conversion")
@@ -237,7 +226,7 @@ impl ToMlir for DataTy {
 
     fn to_mlir<'c>(&self, context: &'c Context) -> Type<'c> {
         match &self.dty {
-            DataTyKind::Scalar(scalar_ty) => scalar_ty_to_mlir(scalar_ty, context),
+            DataTyKind::Scalar(scalar_ty) => scalar_ty.to_mlir(context),
             DataTyKind::Atomic(atomic_ty) => match atomic_ty {
                 AtomicTy::AtomicU32 => IntegerType::new(context, 32).into(),
                 AtomicTy::AtomicI32 => IntegerType::new(context, 32).into(),
@@ -247,20 +236,16 @@ impl ToMlir for DataTy {
                     elem_tys.iter().map(|ty| ty.to_mlir(context)).collect();
                 TupleType::new(context, &elem_types).into()
             }
-            DataTyKind::Ident(ident) => ident_to_mlir(ident, context),
+            DataTyKind::Ident(ident) => ident.to_mlir(context),
             DataTyKind::Array(elem_ty, size) => {
                 let elem_type = elem_ty.to_mlir(context);
-                let dim = nat_to_dimension(size);
-                let memref_str = format!("memref<{}x{}>", dim, elem_type);
-                Type::parse(context, &memref_str).expect("Failed to parse memref type")
+                let dim = size.to_dimension_i64();
+                MemRefType::new(elem_type, &[dim], None, None).into()
             }
             DataTyKind::ArrayShape(elem_ty, size) => {
-                // ArrayShape is similar to Array but may have different semantics
-                // For now, treat it the same as Array using memref
                 let elem_type = elem_ty.to_mlir(context);
-                let dim = nat_to_dimension(size);
-                let memref_str = format!("memref<{}x{}>", dim, elem_type);
-                Type::parse(context, &memref_str).expect("Failed to parse memref type")
+                let dim = size.to_dimension_i64();
+                MemRefType::new(elem_type, &[dim], None, None).into()
             }
             DataTyKind::Struct(_) => {
                 unimplemented!("Struct types not yet supported in MLIR conversion")
@@ -277,9 +262,7 @@ impl ToMlir for DataTy {
             DataTyKind::Ref(ref_dty) => {
                 // Convert the inner DataTy to MLIR based on its kind
                 match &ref_dty.dty.dty {
-                    DataTyKind::Scalar(scalar_ty) => {
-                        ref_scalar_to_mlir(scalar_ty, &ref_dty.mem, context)
-                    }
+                    DataTyKind::Scalar(scalar_ty) => scalar_ty.to_mlir_ref(&ref_dty.mem, context),
                     DataTyKind::Array(elem_ty, size) => {
                         ref_array_to_mlir(elem_ty, size, &ref_dty.mem, context)
                     }
@@ -366,15 +349,16 @@ impl ToMlir for FunDef {
         let function_name = &self.ident.name;
 
         // Create attributes based on execution type
-        let attributes: Vec<(Identifier, Attribute)> = if matches!(self.exec.exec.base, BaseExec::GpuGrid(_, _)) {
-            // For GPU functions, we need to create HACC attributes
-            // Since we can't easily create HACC dialect attributes here, we'll use empty attributes
-            // The actual GPU attributes will be handled in the string-based generation path
-            vec![]
-        } else {
-            // For CPU functions, no special attributes needed
-            vec![]
-        };
+        let attributes: Vec<(Identifier, Attribute)> =
+            if matches!(self.exec.exec.base, BaseExec::GpuGrid(_, _)) {
+                // For GPU functions, we need to create HACC attributes
+                // Since we can't easily create HACC dialect attributes here, we'll use empty attributes
+                // The actual GPU attributes will be handled in the string-based generation path
+                vec![]
+            } else {
+                // For CPU functions, no special attributes needed
+                vec![]
+            };
 
         func::func(
             context,
@@ -396,17 +380,20 @@ struct ParameterUsage {
 
 impl ParameterUsage {
     fn new() -> Self {
-        Self { read: false, write: false }
+        Self {
+            read: false,
+            write: false,
+        }
     }
-    
+
     fn mark_read(&mut self) {
         self.read = true;
     }
-    
+
     fn mark_write(&mut self) {
         self.write = true;
     }
-    
+
     fn needs_ub_allocation(&self) -> bool {
         // Only allocate ub memory if the parameter is read from
         // (parameters that are only written to can write directly to global memory)
@@ -415,18 +402,23 @@ impl ParameterUsage {
 }
 
 /// Collect which parameters are referenced in the function body and how they are used
-fn collect_parameter_usage(fun: &crate::ast::FunDef) -> std::collections::HashMap<String, ParameterUsage> {
+fn collect_parameter_usage(
+    fun: &crate::ast::FunDef,
+) -> std::collections::HashMap<String, ParameterUsage> {
     use crate::ast::{Expr, ExprKind, PlaceExprKind};
     use std::collections::HashMap;
-    
+
     let mut param_usage = HashMap::new();
-    
+
     fn walk_expr(expr: &Expr, param_usage: &mut HashMap<String, ParameterUsage>) {
         match &expr.expr {
             ExprKind::PlaceExpr(place_expr) => {
                 // This is a read operation
                 if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    param_usage.entry(ident.name.to_string()).or_insert_with(ParameterUsage::new).mark_read();
+                    param_usage
+                        .entry(ident.name.to_string())
+                        .or_insert_with(ParameterUsage::new)
+                        .mark_read();
                 }
             }
             ExprKind::BinOp(_, lhs, rhs) => {
@@ -444,14 +436,20 @@ fn collect_parameter_usage(fun: &crate::ast::FunDef) -> std::collections::HashMa
             ExprKind::Assign(place_expr, value_expr) => {
                 // This is a write operation
                 if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    param_usage.entry(ident.name.to_string()).or_insert_with(ParameterUsage::new).mark_write();
+                    param_usage
+                        .entry(ident.name.to_string())
+                        .or_insert_with(ParameterUsage::new)
+                        .mark_write();
                 }
                 walk_expr(value_expr, param_usage);
             }
             ExprKind::IdxAssign(place_expr, _, value_expr) => {
                 // This is a write operation
                 if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    param_usage.entry(ident.name.to_string()).or_insert_with(ParameterUsage::new).mark_write();
+                    param_usage
+                        .entry(ident.name.to_string())
+                        .or_insert_with(ParameterUsage::new)
+                        .mark_write();
                 }
                 walk_expr(value_expr, param_usage);
             }
@@ -475,7 +473,10 @@ fn collect_parameter_usage(fun: &crate::ast::FunDef) -> std::collections::HashMa
             ExprKind::Ref(_, _, place_expr) => {
                 // Taking a reference is a read operation
                 if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    param_usage.entry(ident.name.to_string()).or_insert_with(ParameterUsage::new).mark_read();
+                    param_usage
+                        .entry(ident.name.to_string())
+                        .or_insert_with(ParameterUsage::new)
+                        .mark_read();
                 }
             }
             ExprKind::Unsafe(expr) => {
@@ -486,105 +487,245 @@ fn collect_parameter_usage(fun: &crate::ast::FunDef) -> std::collections::HashMa
             }
         }
     }
-    
+
     walk_expr(&fun.body.body, &mut param_usage);
     param_usage
 }
 
-/// Collect which parameters are referenced in the function body (legacy function for compatibility)
-fn collect_used_parameters(fun: &crate::ast::FunDef) -> std::collections::HashSet<String> {
-    use crate::ast::{Expr, ExprKind, PlaceExprKind};
-    use std::collections::HashSet;
-    
-    let mut used_params = HashSet::new();
-    
-    fn walk_expr(expr: &Expr, used_params: &mut HashSet<String>) {
+/// Generate body operations for GPU functions
+fn generate_body_operations(
+    fun: &crate::ast::FunDef,
+    param_to_local: &std::collections::HashMap<String, String>,
+    alloc_counter: &mut usize,
+    context: &Context,
+) -> String {
+    use crate::ast::{DataTyKind, Expr, ExprKind, Memory, PlaceExprKind, TyKind};
+
+    let mut body_ops = String::new();
+
+    fn walk_expr(
+        expr: &Expr,
+        fun: &crate::ast::FunDef,
+        param_to_local: &std::collections::HashMap<String, String>,
+        alloc_counter: &mut usize,
+        context: &Context,
+        body_ops: &mut String,
+    ) -> Option<String> {
         match &expr.expr {
+            ExprKind::BinOp(binop, lhs, rhs) => {
+                // Process left and right operands
+                let lhs_var =
+                    walk_expr(lhs, fun, param_to_local, alloc_counter, context, body_ops)?;
+                let rhs_var =
+                    walk_expr(rhs, fun, param_to_local, alloc_counter, context, body_ops)?;
+
+                // Generate output allocation
+                let output_alloc = if *alloc_counter == 0 {
+                    "%alloc".to_string()
+                } else {
+                    format!("%alloc_{}", *alloc_counter - 1)
+                };
+                *alloc_counter += 1;
+
+                // Determine the type for allocation (use the type of lhs as reference)
+                let lhs_type = match &lhs.expr {
+                    ExprKind::PlaceExpr(place_expr) => {
+                        if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                            // Find the parameter declaration to get its type
+                            if let Some(param_decl) =
+                                fun.param_decls.iter().find(|p| p.ident.name == ident.name)
+                            {
+                                if let Some(param_ty) = &param_decl.ty {
+                                    // Convert the parameter type to ub address space
+                                    match &param_ty.ty {
+                                        TyKind::Data(data_ty) => match &data_ty.dty {
+                                            DataTyKind::At(inner, _) => {
+                                                let base_type = inner.to_mlir(context);
+                                                let base_str = base_type.to_string();
+                                                apply_hivm_address_space(
+                                                    base_str,
+                                                    &Memory::GpuLocal,
+                                                )
+                                            }
+                                            DataTyKind::Ref(ref_dty) => {
+                                                let base_type = ref_dty.dty.to_mlir(context);
+                                                let base_str = base_type.to_string();
+                                                apply_hivm_address_space(
+                                                    base_str,
+                                                    &Memory::GpuLocal,
+                                                )
+                                            }
+                                            _ => get_mlir_type_string_with_address_space(
+                                                param_ty, context,
+                                            ),
+                                        },
+                                        _ => get_mlir_type_string_with_address_space(
+                                            param_ty, context,
+                                        ),
+                                    }
+                                } else {
+                                    return None;
+                                }
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                    }
+                    _ => return None,
+                };
+
+                // Generate allocation
+                body_ops.push_str(&format!(
+                    "    {} = memref.alloc() : {}\n",
+                    output_alloc, lhs_type
+                ));
+
+                // Generate HIVM operation
+                let hivm_op = binop_to_hivm_operation(binop);
+                body_ops.push_str(&format!(
+                    "    {} ins({}, {} : {}, {}) outs({} : {})\n",
+                    hivm_op, lhs_var, rhs_var, lhs_type, lhs_type, output_alloc, lhs_type
+                ));
+
+                Some(output_alloc)
+            }
             ExprKind::PlaceExpr(place_expr) => {
                 if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    used_params.insert(ident.name.to_string());
-                }
-            }
-            ExprKind::BinOp(_, lhs, rhs) => {
-                walk_expr(lhs, used_params);
-                walk_expr(rhs, used_params);
-            }
-            ExprKind::Let(_, _, value_expr) => {
-                walk_expr(value_expr, used_params);
-            }
-            ExprKind::Seq(exprs) => {
-                for expr in exprs {
-                    walk_expr(expr, used_params);
+                    // Return the local variable name for this parameter
+                    param_to_local.get(&ident.name.to_string()).cloned()
+                } else {
+                    None
                 }
             }
             ExprKind::Assign(place_expr, value_expr) => {
+                // Handle assignment: b = a
+                // First, evaluate the right-hand side (value expression)
+                let value_var = walk_expr(
+                    value_expr,
+                    fun,
+                    param_to_local,
+                    alloc_counter,
+                    context,
+                    body_ops,
+                )?;
+
+                // Find the target parameter for the assignment
                 if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    used_params.insert(ident.name.to_string());
+                    // Find the parameter declaration to get its type and index
+                    if let Some((param_idx, param_decl)) = fun
+                        .param_decls
+                        .iter()
+                        .enumerate()
+                        .find(|(_, p)| p.ident.name == ident.name)
+                    {
+                        if let Some(param_ty) = &param_decl.ty {
+                            // Check if we're assigning to a reference - if so, it must be unique
+                            if let TyKind::Data(data_ty) = &param_ty.ty {
+                                if let DataTyKind::Ref(ref_dty) = &data_ty.dty {
+                                    if ref_dty.own != Ownership::Uniq {
+                                        panic!(
+                                            "Assignment to non-unique reference is not allowed. Expected unique reference, found {:?}",
+                                            ref_dty.own
+                                        );
+                                    }
+                                }
+                            }
+
+                            // Generate the target parameter type (should be gm address space)
+                            let target_type =
+                                get_mlir_type_string_with_address_space(param_ty, context);
+
+                            // Generate the source type (should be ub address space for local allocations)
+                            let source_type = match &param_ty.ty {
+                                TyKind::Data(data_ty) => match &data_ty.dty {
+                                    DataTyKind::At(inner, _) => {
+                                        let base_type = inner.to_mlir(context);
+                                        let base_str = base_type.to_string();
+                                        apply_hivm_address_space(base_str, &Memory::GpuLocal)
+                                    }
+                                    DataTyKind::Ref(ref_dty) => {
+                                        let base_type = ref_dty.dty.to_mlir(context);
+                                        let base_str = base_type.to_string();
+                                        apply_hivm_address_space(base_str, &Memory::GpuLocal)
+                                    }
+                                    _ => get_mlir_type_string_with_address_space(param_ty, context),
+                                },
+                                _ => get_mlir_type_string_with_address_space(param_ty, context),
+                            };
+
+                            // Generate store operation: hivm.hir.store ins(value) outs(%argN)
+                            body_ops.push_str(&format!(
+                                "    hivm.hir.store ins({} : {}) outs(%arg{} : {})\n",
+                                value_var, source_type, param_idx, target_type
+                            ));
+                        }
+                    }
                 }
-                walk_expr(value_expr, used_params);
+
+                // Assignment doesn't produce a value
+                None
             }
-            ExprKind::App(_, _, args) => {
-                for arg in args {
-                    walk_expr(arg, used_params);
+            ExprKind::Seq(exprs) => {
+                // Process sequence expressions, return the result of the last expression
+                let mut last_result = None;
+                for expr in exprs {
+                    last_result =
+                        walk_expr(expr, fun, param_to_local, alloc_counter, context, body_ops);
                 }
+                last_result
             }
-            ExprKind::IfElse(cond, case_true, case_false) => {
-                walk_expr(cond, used_params);
-                walk_expr(case_true, used_params);
-                walk_expr(case_false, used_params);
-            }
-            ExprKind::If(cond, case_true) => {
-                walk_expr(cond, used_params);
-                walk_expr(case_true, used_params);
-            }
-            ExprKind::ForNat(_, _, body) => {
-                walk_expr(body, used_params);
-            }
-            ExprKind::Ref(_, _, place_expr) => {
-                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    used_params.insert(ident.name.to_string());
-                }
-            }
-            ExprKind::Unsafe(expr) => {
-                walk_expr(expr, used_params);
+            ExprKind::Lit(_) => {
+                // Literals don't produce SSA values in this context
+                None
             }
             _ => {
-                // Other expression types don't contain variable references
+                // Other expression types not yet supported
+                None
             }
         }
     }
-    
-    walk_expr(&fun.body.body, &mut used_params);
-    used_params
+
+    walk_expr(
+        &fun.body.body,
+        fun,
+        param_to_local,
+        alloc_counter,
+        context,
+        &mut body_ops,
+    );
+    body_ops
 }
 
 /// Generate load operations for GPU parameters
+/// Returns (operations_string, param_to_local_map, final_alloc_counter)
 fn generate_load_operations(
-    fun: &crate::ast::FunDef, 
+    fun: &crate::ast::FunDef,
     param_usage: &std::collections::HashMap<String, ParameterUsage>,
-    context: &Context
-) -> String {
+    context: &Context,
+) -> (String, std::collections::HashMap<String, String>, usize) {
     use crate::ast::{DataTyKind, Memory, TyKind};
     use std::collections::HashMap;
-    
+
     let mut load_ops = String::new();
     let mut param_to_local = HashMap::new();
     let mut alloc_counter = 0;
-    
+
     for (i, param) in fun.param_decls.iter().enumerate() {
         let param_name = param.ident.name.to_string();
-        
+
         // Check if parameter is used and needs ub allocation
         let usage = match param_usage.get(&param_name) {
             Some(usage) => usage,
             None => continue, // Parameter not used at all
         };
-        
+
         // Only allocate ub memory if the parameter is read from
         if !usage.needs_ub_allocation() {
             continue;
         }
-        
+
         if let Some(ty) = &param.ty {
             if let TyKind::Data(data_ty) = &ty.ty {
                 let needs_gpu_load = match &data_ty.dty {
@@ -596,11 +737,11 @@ fn generate_load_operations(
                     }
                     _ => false,
                 };
-                
+
                 if needs_gpu_load {
                     // Generate the original type with gm address space
                     let gm_type = get_mlir_type_string_with_address_space(ty, context);
-                    
+
                     // Generate the local type with ub address space
                     let ub_type = match &data_ty.dty {
                         DataTyKind::At(inner, _) => {
@@ -615,21 +756,31 @@ fn generate_load_operations(
                         }
                         _ => gm_type.clone(),
                     };
-                    
+
                     // Generate alloc and load operations
-                    load_ops.push_str(&format!("    %alloc{} = memref.alloc() : {}\n", alloc_counter, ub_type));
-                    load_ops.push_str(&format!("    hivm.hir.load ins(%arg{} : {}) outs(%alloc{} : {})\n", 
-                        i, gm_type, alloc_counter, ub_type));
-                    
+                    let alloc_name = if alloc_counter == 0 {
+                        "%alloc".to_string()
+                    } else {
+                        format!("%alloc_{}", alloc_counter - 1)
+                    };
+                    load_ops.push_str(&format!(
+                        "    {} = memref.alloc() : {}\n",
+                        alloc_name, ub_type
+                    ));
+                    load_ops.push_str(&format!(
+                        "    hivm.hir.load ins(%arg{} : {}) outs({} : {})\n",
+                        i, gm_type, alloc_name, ub_type
+                    ));
+
                     // Map parameter to its local version
-                    param_to_local.insert(param_name, format!("%alloc{}", alloc_counter));
+                    param_to_local.insert(param_name, alloc_name);
                     alloc_counter += 1;
                 }
             }
         }
     }
-    
-    load_ops
+
+    (load_ops, param_to_local, alloc_counter)
 }
 
 /// Generate function with body including load operations for GPU parameters
@@ -667,18 +818,24 @@ fn generate_function_with_body(fun: &crate::ast::FunDef, context: &Context) -> S
         // TODO: When HACC dialect is registered in the MLIR context, replace this with:
         // let hacc_attributes = create_hacc_attributes(context);
         // and use the attributes with MLIR operation builders instead of string generation
-        signature.push_str(&generate_hacc_attributes_string(context));
+        signature
+            .push_str(" attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}");
     }
 
     signature.push_str(" {\n");
-    
+
     // Collect parameter usage information
     let param_usage = collect_parameter_usage(fun);
-    
+
     // Generate load operations for GPU parameters (only for read usage)
-    let load_ops = generate_load_operations(fun, &param_usage, context);
+    let (load_ops, param_to_local, mut alloc_counter) =
+        generate_load_operations(fun, &param_usage, context);
     signature.push_str(&load_ops);
-    
+
+    // Generate body operations (binary operations, etc.)
+    let body_ops = generate_body_operations(fun, &param_to_local, &mut alloc_counter, context);
+    signature.push_str(&body_ops);
+
     signature.push_str("    return\n  }\n");
     signature
 }
@@ -863,17 +1020,6 @@ mod tests {
     }
 
     #[test]
-    fn test_array_with_dynamic_size_to_mlir() {
-        let context = Context::new();
-        let data_ty = make_data_ty(DataTyKind::Array(
-            Box::new(make_data_ty(DataTyKind::Scalar(ScalarTy::I64))),
-            Nat::Ident(Ident::new("n")),
-        ));
-        let mlir_type = data_ty.to_mlir(&context);
-        assert_eq!(mlir_type.to_string(), "memref<?xi64>");
-    }
-
-    #[test]
     fn test_array_shape_with_literal_size_to_mlir() {
         let context = Context::new();
         let data_ty = make_data_ty(DataTyKind::ArrayShape(
@@ -929,23 +1075,6 @@ mod tests {
         assert_eq!(mlir_type.to_string(), "memref<10xf32>");
     }
 
-    #[test]
-    fn test_ref_array_dynamic_to_mlir() {
-        let context = Context::new();
-        let ref_dty = RefDty::new(
-            Provenance::Ident(Ident::new("r")),
-            Ownership::Shrd,
-            Memory::CpuMem,
-            make_data_ty(DataTyKind::Array(
-                Box::new(make_data_ty(DataTyKind::Scalar(ScalarTy::I64))),
-                Nat::Ident(Ident::new("n")),
-            )),
-        );
-        let data_ty = make_data_ty(DataTyKind::Ref(Box::new(ref_dty)));
-        let mlir_type = data_ty.to_mlir(&context);
-        assert_eq!(mlir_type.to_string(), "memref<?xi64>");
-    }
-
     /// Helper function to test At type lowering without MLIR parsing (avoids HIVM dialect registration)
     fn test_at_type_string(data_ty: &DataTy, context: &Context) -> String {
         match &data_ty.dty {
@@ -988,8 +1117,10 @@ mod tests {
 
     /// Helper function to create a minimal GPU function with GpuGrid execution context
     fn make_gpu_function() -> FunDef {
-        use crate::ast::{Block, DataTy, DataTyKind, Dim, Dim1d, ExecExpr, ExecExprKind, Ident, ScalarTy, Span};
-        
+        use crate::ast::{
+            Block, DataTy, DataTyKind, Dim, Dim1d, ExecExpr, ExecExprKind, Ident, ScalarTy, Span,
+        };
+
         FunDef {
             ident: Ident {
                 name: "gpu_kernel".into(),
@@ -1028,8 +1159,10 @@ mod tests {
 
     /// Helper function to create a minimal CPU function with CpuThread execution context
     fn make_cpu_function() -> FunDef {
-        use crate::ast::{Block, DataTy, DataTyKind, ExecExpr, ExecExprKind, Ident, ScalarTy, Span};
-        
+        use crate::ast::{
+            Block, DataTy, DataTyKind, ExecExpr, ExecExprKind, Ident, ScalarTy, Span,
+        };
+
         FunDef {
             ident: Ident {
                 name: "cpu_function".into(),
@@ -1068,9 +1201,10 @@ mod tests {
         let context = Context::new();
         let gpu_fun = make_gpu_function();
         let signature = generate_function_with_body(&gpu_fun, &context);
-        
+
         // Check that the signature contains the GPU attributes
-        assert!(signature.contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
+        assert!(signature
+            .contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
         assert!(signature.contains("func.func @gpu_kernel"));
         assert!(signature.contains(") attributes"));
     }
@@ -1080,9 +1214,10 @@ mod tests {
         let context = Context::new();
         let cpu_fun = make_cpu_function();
         let signature = generate_function_with_body(&cpu_fun, &context);
-        
+
         // Check that the signature does NOT contain GPU attributes
-        assert!(!signature.contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
+        assert!(!signature
+            .contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
         assert!(signature.contains("func.func @cpu_function"));
         assert!(signature.contains(") {"));
         assert!(!signature.contains(") attributes"));
@@ -1093,17 +1228,19 @@ mod tests {
         let context = Context::new();
         let gpu_fun = make_gpu_function();
         let signature = generate_function_with_body(&gpu_fun, &context);
-        
+
         // Check that attributes appear in the correct position (after params, before brace)
         let lines: Vec<&str> = signature.lines().collect();
-        
+
         // The function signature should have 3 lines: func declaration, return, closing brace
         assert_eq!(lines.len(), 3);
-        
+
         let func_line = lines[0]; // First line should be the function declaration
         assert!(func_line.contains("func.func @gpu_kernel"));
-        assert!(func_line.contains(") attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>} {"));
-        
+        assert!(func_line.contains(
+            ") attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>} {"
+        ));
+
         // Verify the structure: function_name() attributes { ... } {
         let parts: Vec<&str> = func_line.split(") attributes").collect();
         assert_eq!(parts.len(), 2);
