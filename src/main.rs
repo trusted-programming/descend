@@ -49,12 +49,11 @@ fn main() {
 
     // Compile using Descend
     let (code_string, ast_string) = match descend::compile(&input_path.to_string_lossy(), backend) {
-            Ok(output) => output,
-            Err(e) => {
-                eprintln!("Compilation failed: {:?}", e);
-                std::process::exit(1);
-            }
-        
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("Compilation failed: {:?}", e);
+            std::process::exit(1);
+        }
     };
 
     // Generate output file path with appropriate extension based on backend

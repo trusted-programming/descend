@@ -36,12 +36,13 @@ use builder::MlirBuilder;
 use error::MlirError;
 use melior::{
     dialect::DialectRegistry,
-    ir::{Location, Module, operation::OperationLike},
+    ir::{operation::OperationLike, Location, Module},
     utility::register_all_dialects,
     Context,
 };
 
 use crate::ast::CompilUnit;
+use crate::ast::{DataTyKind, Memory, TyKind};
 
 /// Internal helper function to build MLIR module
 fn build_module_internal(comp_unit: &CompilUnit) -> Result<String, MlirError> {
@@ -92,13 +93,10 @@ pub fn gen_checked(comp_unit: &CompilUnit, _idx_checks: bool) -> Result<String, 
 fn needs_hivm_address_space(comp_unit: &CompilUnit) -> bool {
     for item in &comp_unit.items {
         if let crate::ast::Item::FunDef(fun) = item {
-            // Only check the main function or functions that are not HIVM placeholders
-            if fun.ident.name == "main".into() || !is_hivm_placeholder_function(fun) {
-                for param in &fun.param_decls {
-                    if let Some(ty) = &param.ty {
-                        if has_gpu_memory(ty) {
-                            return true;
-                        }
+            for param in &fun.param_decls {
+                if let Some(ty) = &param.ty {
+                    if has_gpu_memory(ty) {
+                        return true;
                     }
                 }
             }
@@ -107,31 +105,19 @@ fn needs_hivm_address_space(comp_unit: &CompilUnit) -> bool {
     false
 }
 
-/// Check if a function is a HIVM placeholder function
-fn is_hivm_placeholder_function(fun: &crate::ast::FunDef) -> bool {
-    fun.ident.name.starts_with("hivm_")
-}
-
 /// Check if a type has GPU memory qualifiers
 fn has_gpu_memory(ty: &crate::ast::Ty) -> bool {
+    fn mem_is_gpu(mem: &Memory) -> bool {
+        matches!(
+            mem,
+            Memory::GpuGlobal | Memory::GpuShared | Memory::GpuLocal
+        )
+    }
+
     match &ty.ty {
-        crate::ast::TyKind::Data(data_ty) => match &data_ty.dty {
-            crate::ast::DataTyKind::At(_, mem) => {
-                matches!(
-                    mem,
-                    crate::ast::Memory::GpuGlobal
-                        | crate::ast::Memory::GpuShared
-                        | crate::ast::Memory::GpuLocal
-                )
-            }
-            crate::ast::DataTyKind::Ref(ref_dty) => {
-                matches!(
-                    ref_dty.mem,
-                    crate::ast::Memory::GpuGlobal
-                        | crate::ast::Memory::GpuShared
-                        | crate::ast::Memory::GpuLocal
-                )
-            }
+        TyKind::Data(data_ty) => match &data_ty.dty {
+            DataTyKind::At(_, mem) => mem_is_gpu(mem),
+            DataTyKind::Ref(ref_dty) => mem_is_gpu(&ref_dty.mem),
             _ => false,
         },
         _ => false,
