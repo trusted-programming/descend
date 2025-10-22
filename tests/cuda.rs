@@ -7,9 +7,8 @@ mod rodinia;
 #[path = "cuda/error_examples.rs"]
 mod error_examples;
 
-#[path = "cuda/simple.rs"]
-mod simple;
-
+#[path = "cuda/core.rs"]
+mod core;
 
 #[path = "cuda/softmax.rs"]
 mod softmax;

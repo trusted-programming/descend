@@ -1,0 +1,20 @@
+---
+source: tests/cuda/core.rs
+assertion_line: 36
+expression: output
+---
+#include "descend.cuh"
+/*
+function declarations
+*/
+__host__ auto main(
+
+    ) -> void;
+/*
+function definitions
+*/
+__host__ auto main(
+
+    ) -> void {
+  const auto x = 10;
+}

@@ -1,0 +1,10 @@
+---
+source: tests/mlir/core.rs
+assertion_line: 4
+expression: output
+---
+module {
+  func.func @add(%arg0: memref<16xi16, #hivm.address_space<gm>>, %arg1: memref<16xi16, #hivm.address_space<gm>>, %arg2: memref<16xi16, #hivm.address_space<gm>>) attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>} {
+    return
+  }
+}

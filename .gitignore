@@ -5,11 +5,11 @@ Cargo.lock
 
 # IDE and editor files
 /.idea/
-/.vscode/
 .cursor/
 *.swp
 *.swo
 *~
+.cursorignore
 
 # OS generated files
 .DS_Store

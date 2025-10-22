@@ -148,3 +148,77 @@ pub fn span_derive(attr: TokenStream, input: TokenStream) -> TokenStream {
 
     TokenStream::from(output)
 }
+
+/// Proc macro to automatically generate tests for all .desc files in examples/core/
+#[proc_macro]
+pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
+    // Use include_dir! as a fallback for compile-time file inclusion
+    // This ensures the files are available even if the directory structure changes
+    let dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/../examples/core");
+
+    let mut test_functions = Vec::new();
+
+    for file in dir.files() {
+        if let Some(extension) = file.path().extension() {
+            if extension == "desc" {
+                let file_name = file
+                    .path()
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown");
+
+                // Use the original file path from the filesystem, not the embedded path
+                let full_path = format!(
+                    "examples/core/{}",
+                    file.path()
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown.desc")
+                );
+
+                // Convert file name to valid Rust identifier
+                let test_name = file_name.replace("-", "_").replace(".", "_");
+
+                // Handle Rust keywords and match existing snapshot names
+                let test_name = match test_name.as_str() {
+                    "if" => "if_only".to_string(),
+                    "const" => "constant".to_string(),
+                    "for" => "for_loop".to_string(),
+                    "fn" => "function".to_string(),
+                    "let" => "let_binding".to_string(),
+                    "match" => "match_expr".to_string(),
+                    "mod" => "module".to_string(),
+                    "pub" => "public".to_string(),
+                    "return" => "return_stmt".to_string(),
+                    "self" => "self_ref".to_string(),
+                    "super" => "super_ref".to_string(),
+                    "trait" => "trait_def".to_string(),
+                    "type" => "type_alias".to_string(),
+                    "use" => "use_stmt".to_string(),
+                    "where" => "where_clause".to_string(),
+                    "while" => "while_loop".to_string(),
+                    "unit" => "core_unit".to_string(),
+                    "func" => "func_call".to_string(),
+                    "test_no_main" => "no_main".to_string(),
+                    _ => test_name,
+                };
+
+                let test_name_ident = Ident::new(&test_name, proc_macro2::Span::call_site());
+                let file_path_lit = proc_macro2::Literal::string(&full_path);
+
+                test_functions.push(quote! {
+                    #[test]
+                    fn #test_name_ident() -> Result<(), descend::error::ErrorReported> {
+                        let output = descend::compile(#file_path_lit, crate::BACKEND)?.0;
+                        insta::assert_snapshot!(output);
+                        Ok(())
+                    }
+                });
+            }
+        }
+    }
+
+    TokenStream::from(quote! {
+        #(#test_functions)*
+    })
+}

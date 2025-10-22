@@ -1,0 +1,9 @@
+fn add(a: i32, b: i32) -[t: cpu.thread]-> i32 {
+    a + b
+}
+
+fn main() -[t: cpu.thread]-> i32 {
+    add(10, 32)
+}
+
+

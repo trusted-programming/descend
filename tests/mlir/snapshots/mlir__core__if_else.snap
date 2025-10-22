@@ -1,0 +1,19 @@
+---
+source: tests/mlir/core.rs
+assertion_line: 4
+expression: output
+---
+module {
+  func.func @main() -> i32 {
+    %c10_i32 = arith.constant 10 : i32
+    %c20_i32 = arith.constant 20 : i32
+    %0 = arith.cmpi slt, %c10_i32, %c20_i32 : i32
+    scf.if %0 {
+      %1 = arith.addi %c10_i32, %c20_i32 : i32
+    } else {
+      %1 = arith.subi %c10_i32, %c20_i32 : i32
+    }
+    %c0_i32 = arith.constant 0 : i32
+    return %c0_i32 : i32
+  }
+}

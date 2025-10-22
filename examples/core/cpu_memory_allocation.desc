@@ -1,0 +1,8 @@
+
+fn main() -[t: cpu.thread]-> () <'a>{
+    let a: &'a uniq cpu.mem [i16; 1*16] = unsafe _;
+    let b: &'a uniq cpu.mem [i16; 1*16] = unsafe _;
+    let c: &'a shrd cpu.mem [i16; 1*16] = unsafe _;
+
+    ()
+}
