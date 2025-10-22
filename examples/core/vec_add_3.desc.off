@@ -1,7 +1,0 @@
-fn add<n: nat, r: prv>(
-    a: &r shrd gpu.global [i16; 16],
-    b: &r shrd gpu.global [i16; 16]
-) -[grid: gpu.grid<X<1>, X<16>>]-> () {
-    a + b;
-    ()
-}
