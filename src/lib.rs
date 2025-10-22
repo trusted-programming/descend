@@ -30,17 +30,3 @@ pub fn compile(file_path: &str, backend: Backend) -> Result<(String, String), Er
 
     Ok((code_string, ast_string))
 }
-
-pub fn compile_unchecked(file_path: &str, backend: Backend) -> Result<String, ErrorReported> {
-    let source = parser::SourceCode::from_file(file_path)?;
-    let mut compil_unit = parser::parse(&source)?;
-
-    ty_check::ty_check(&mut compil_unit)?;
-
-    let code_string = match backend {
-        Backend::Cuda => codegen::cuda::gen(&compil_unit, false),
-        Backend::Mlir => codegen::mlir::gen(&compil_unit, false),
-    };
-
-    Ok(code_string)
-}

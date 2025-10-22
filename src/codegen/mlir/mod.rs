@@ -72,22 +72,6 @@ fn build_module_internal(comp_unit: &CompilUnit) -> Result<String, MlirError> {
     Ok(builder.module().as_operation().to_string())
 }
 
-pub fn gen(comp_unit: &CompilUnit, _idx_checks: bool) -> String {
-    // Check if we need HIVM address spaces
-    if needs_hivm_address_space(comp_unit) {
-        to_mlir::types::generate_mlir_string_with_hivm(comp_unit)
-    } else {
-        // Use internal helper, but handle errors by falling back to string generation
-        match build_module_internal(comp_unit) {
-            Ok(mlir_string) => mlir_string,
-            Err(_) => {
-                // Fallback to string generation if internal building fails
-                to_mlir::types::generate_mlir_string_with_hivm(comp_unit)
-            }
-        }
-    }
-}
-
 pub fn gen_checked(comp_unit: &CompilUnit, _idx_checks: bool) -> Result<String, String> {
     // Check if we need HIVM address spaces
     if needs_hivm_address_space(comp_unit) {

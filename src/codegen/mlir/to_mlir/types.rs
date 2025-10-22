@@ -1,4 +1,4 @@
-use crate::ast::{AtomicTy, BaseExec, DataTy, DataTyKind, FunDef, Memory, Nat, NatCtx, ScalarTy, Ty, TyKind};
+use crate::ast::{AtomicTy, BaseExec, DataTy, DataTyKind, FunDef, Memory, Nat, NatCtx, Ownership, ScalarTy, Ty, TyKind};
 use melior::{
     dialect::func,
     ir::{
@@ -21,35 +21,6 @@ fn nat_to_dimension(nat: &Nat) -> String {
         Ok(size) => size.to_string(),
         Err(_) => "?".to_string(), // Use dynamic dimension for non-literal Nat
     }
-}
-
-/// Helper function to create HACC attributes for GPU functions
-/// This function creates proper MLIR attribute objects for HACC attributes.
-/// Note: This requires the HACC dialect to be registered in the MLIR context.
-fn create_hacc_attributes<'c>(context: &'c Context) -> Vec<(Identifier<'c>, Attribute<'c>)> {
-    // Create HACC entry attribute (hacc.entry) - this is a unit attribute
-    let entry_attr = Attribute::parse(context, "unit")
-        .expect("Failed to create HACC entry attribute");
-    
-    // Create HACC function type attribute (hacc.function_kind = DEVICE)
-    // Note: This will fail if the HACC dialect is not registered in the context
-    let func_type_attr = Attribute::parse(context, "#hacc.function_kind<DEVICE>")
-        .expect("Failed to create HACC function type attribute - ensure HACC dialect is registered");
-    
-    vec![
-        (Identifier::new(context, "hacc.entry"), entry_attr),
-        (Identifier::new(context, "hacc.function_kind"), func_type_attr),
-    ]
-}
-
-/// Helper function to generate HACC attributes string for GPU functions
-/// This function generates the MLIR string representation of HACC attributes
-/// for use in string-based MLIR generation. The proper attribute objects
-/// are available through create_hacc_attributes() when the HACC dialect is registered.
-fn generate_hacc_attributes_string(context: &Context) -> String {
-    // Generate the string representation directly since we know the exact format
-    // The create_hacc_attributes() function is available for when the HACC dialect is registered
-    " attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}".to_string()
 }
 
 /// Helper function to convert ScalarTy to MLIR Type
@@ -505,73 +476,6 @@ fn collect_parameter_usage(fun: &crate::ast::FunDef) -> std::collections::HashMa
     param_usage
 }
 
-/// Collect which parameters are referenced in the function body (legacy function for compatibility)
-fn collect_used_parameters(fun: &crate::ast::FunDef) -> std::collections::HashSet<String> {
-    use crate::ast::{Expr, ExprKind, PlaceExprKind};
-    use std::collections::HashSet;
-    
-    let mut used_params = HashSet::new();
-    
-    fn walk_expr(expr: &Expr, used_params: &mut HashSet<String>) {
-        match &expr.expr {
-            ExprKind::PlaceExpr(place_expr) => {
-                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    used_params.insert(ident.name.to_string());
-                }
-            }
-            ExprKind::BinOp(_, lhs, rhs) => {
-                walk_expr(lhs, used_params);
-                walk_expr(rhs, used_params);
-            }
-            ExprKind::Let(_, _, value_expr) => {
-                walk_expr(value_expr, used_params);
-            }
-            ExprKind::Seq(exprs) => {
-                for expr in exprs {
-                    walk_expr(expr, used_params);
-                }
-            }
-            ExprKind::Assign(place_expr, value_expr) => {
-                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    used_params.insert(ident.name.to_string());
-                }
-                walk_expr(value_expr, used_params);
-            }
-            ExprKind::App(_, _, args) => {
-                for arg in args {
-                    walk_expr(arg, used_params);
-                }
-            }
-            ExprKind::IfElse(cond, case_true, case_false) => {
-                walk_expr(cond, used_params);
-                walk_expr(case_true, used_params);
-                walk_expr(case_false, used_params);
-            }
-            ExprKind::If(cond, case_true) => {
-                walk_expr(cond, used_params);
-                walk_expr(case_true, used_params);
-            }
-            ExprKind::ForNat(_, _, body) => {
-                walk_expr(body, used_params);
-            }
-            ExprKind::Ref(_, _, place_expr) => {
-                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    used_params.insert(ident.name.to_string());
-                }
-            }
-            ExprKind::Unsafe(expr) => {
-                walk_expr(expr, used_params);
-            }
-            _ => {
-                // Other expression types don't contain variable references
-            }
-        }
-    }
-    
-    walk_expr(&fun.body.body, &mut used_params);
-    used_params
-}
-
 /// Generate body operations for GPU functions
 fn generate_body_operations(
     fun: &crate::ast::FunDef,
@@ -680,6 +584,18 @@ fn generate_body_operations(
                     // Find the parameter declaration to get its type and index
                     if let Some((param_idx, param_decl)) = fun.param_decls.iter().enumerate().find(|(_, p)| p.ident.name == ident.name) {
                         if let Some(param_ty) = &param_decl.ty {
+                            // Check if we're assigning to a reference - if so, it must be unique
+                            if let TyKind::Data(data_ty) = &param_ty.ty {
+                                if let DataTyKind::Ref(ref_dty) = &data_ty.dty {
+                                    if ref_dty.own != Ownership::Uniq {
+                                        panic!(
+                                            "Assignment to non-unique reference is not allowed. Expected unique reference, found {:?}",
+                                            ref_dty.own
+                                        );
+                                    }
+                                }
+                            }
+                            
                             // Generate the target parameter type (should be gm address space)
                             let target_type = get_mlir_type_string_with_address_space(param_ty, context);
                             
@@ -856,7 +772,7 @@ fn generate_function_with_body(fun: &crate::ast::FunDef, context: &Context) -> S
         // TODO: When HACC dialect is registered in the MLIR context, replace this with:
         // let hacc_attributes = create_hacc_attributes(context);
         // and use the attributes with MLIR operation builders instead of string generation
-        signature.push_str(&generate_hacc_attributes_string(context));
+        signature.push_str(" attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}");
     }
 
     signature.push_str(" {\n");
