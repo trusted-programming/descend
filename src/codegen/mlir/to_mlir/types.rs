@@ -81,6 +81,20 @@ fn ident_to_mlir<'c>(ident: &crate::ast::Ident, context: &'c Context) -> Type<'c
     }
 }
 
+/// Helper function to map BinOp to HIVM operation names
+fn binop_to_hivm_operation(binop: &crate::ast::BinOp) -> &'static str {
+    match binop {
+        crate::ast::BinOp::Add => "hivm.hir.vadd",
+        crate::ast::BinOp::Sub => unimplemented!("HIVM dialect does not have vsub operation - subtraction not supported in HIVM vector operations"),
+        crate::ast::BinOp::Mul => "hivm.hir.vmul",
+        crate::ast::BinOp::Div => "hivm.hir.vdiv",
+        crate::ast::BinOp::Mod => "hivm.hir.vmod",
+        // For now, only support arithmetic operations
+        // Other operations (comparisons, logical, bitwise) can be added later
+        _ => unimplemented!("HIVM operation for {:?} not yet implemented", binop),
+    }
+}
+
 /// Helper function to apply HIVM address space to a memref type string
 fn apply_hivm_address_space(base_str: String, mem: &Memory) -> String {
     if base_str.starts_with("memref<") {
@@ -558,12 +572,182 @@ fn collect_used_parameters(fun: &crate::ast::FunDef) -> std::collections::HashSe
     used_params
 }
 
+/// Generate body operations for GPU functions
+fn generate_body_operations(
+    fun: &crate::ast::FunDef,
+    param_to_local: &std::collections::HashMap<String, String>,
+    alloc_counter: &mut usize,
+    context: &Context,
+) -> String {
+    use crate::ast::{Expr, ExprKind, PlaceExprKind, DataTyKind, Memory, TyKind};
+    
+    let mut body_ops = String::new();
+    
+    fn walk_expr(
+        expr: &Expr,
+        fun: &crate::ast::FunDef,
+        param_to_local: &std::collections::HashMap<String, String>,
+        alloc_counter: &mut usize,
+        context: &Context,
+        body_ops: &mut String,
+    ) -> Option<String> {
+        match &expr.expr {
+            ExprKind::BinOp(binop, lhs, rhs) => {
+                // Process left and right operands
+                let lhs_var = walk_expr(lhs, fun, param_to_local, alloc_counter, context, body_ops)?;
+                let rhs_var = walk_expr(rhs, fun, param_to_local, alloc_counter, context, body_ops)?;
+                
+                // Generate output allocation
+                let output_alloc = if *alloc_counter == 0 {
+                    "%alloc".to_string()
+                } else {
+                    format!("%alloc_{}", *alloc_counter - 1)
+                };
+                *alloc_counter += 1;
+                
+                // Determine the type for allocation (use the type of lhs as reference)
+                let lhs_type = match &lhs.expr {
+                    ExprKind::PlaceExpr(place_expr) => {
+                        if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                            // Find the parameter declaration to get its type
+                            if let Some(param_decl) = fun.param_decls.iter().find(|p| p.ident.name == ident.name) {
+                                if let Some(param_ty) = &param_decl.ty {
+                                    // Convert the parameter type to ub address space
+                                    match &param_ty.ty {
+                                        TyKind::Data(data_ty) => {
+                                            match &data_ty.dty {
+                                                DataTyKind::At(inner, _) => {
+                                                    let base_type = inner.to_mlir(context);
+                                                    let base_str = base_type.to_string();
+                                                    apply_hivm_address_space(base_str, &Memory::GpuLocal)
+                                                }
+                                                DataTyKind::Ref(ref_dty) => {
+                                                    let base_type = ref_dty.dty.to_mlir(context);
+                                                    let base_str = base_type.to_string();
+                                                    apply_hivm_address_space(base_str, &Memory::GpuLocal)
+                                                }
+                                                _ => get_mlir_type_string_with_address_space(param_ty, context),
+                                            }
+                                        }
+                                        _ => get_mlir_type_string_with_address_space(param_ty, context),
+                                    }
+                                } else {
+                                    return None;
+                                }
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                    }
+                    _ => return None,
+                };
+                
+                // Generate allocation
+                body_ops.push_str(&format!("    {} = memref.alloc() : {}\n", output_alloc, lhs_type));
+                
+                // Generate HIVM operation
+                let hivm_op = binop_to_hivm_operation(binop);
+                body_ops.push_str(&format!(
+                    "    {} ins({}, {} : {}, {}) outs({} : {})\n",
+                    hivm_op,
+                    lhs_var,
+                    rhs_var,
+                    lhs_type,
+                    lhs_type,
+                    output_alloc,
+                    lhs_type
+                ));
+                
+                Some(output_alloc)
+            }
+            ExprKind::PlaceExpr(place_expr) => {
+                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                    // Return the local variable name for this parameter
+                    param_to_local.get(&ident.name.to_string()).cloned()
+                } else {
+                    None
+                }
+            }
+            ExprKind::Assign(place_expr, value_expr) => {
+                // Handle assignment: b = a
+                // First, evaluate the right-hand side (value expression)
+                let value_var = walk_expr(value_expr, fun, param_to_local, alloc_counter, context, body_ops)?;
+                
+                // Find the target parameter for the assignment
+                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
+                    // Find the parameter declaration to get its type and index
+                    if let Some((param_idx, param_decl)) = fun.param_decls.iter().enumerate().find(|(_, p)| p.ident.name == ident.name) {
+                        if let Some(param_ty) = &param_decl.ty {
+                            // Generate the target parameter type (should be gm address space)
+                            let target_type = get_mlir_type_string_with_address_space(param_ty, context);
+                            
+                            // Generate the source type (should be ub address space for local allocations)
+                            let source_type = match &param_ty.ty {
+                                TyKind::Data(data_ty) => {
+                                    match &data_ty.dty {
+                                        DataTyKind::At(inner, _) => {
+                                            let base_type = inner.to_mlir(context);
+                                            let base_str = base_type.to_string();
+                                            apply_hivm_address_space(base_str, &Memory::GpuLocal)
+                                        }
+                                        DataTyKind::Ref(ref_dty) => {
+                                            let base_type = ref_dty.dty.to_mlir(context);
+                                            let base_str = base_type.to_string();
+                                            apply_hivm_address_space(base_str, &Memory::GpuLocal)
+                                        }
+                                        _ => get_mlir_type_string_with_address_space(param_ty, context),
+                                    }
+                                }
+                                _ => get_mlir_type_string_with_address_space(param_ty, context),
+                            };
+                            
+                            // Generate store operation: hivm.hir.store ins(value) outs(%argN)
+                            body_ops.push_str(&format!(
+                                "    hivm.hir.store ins({} : {}) outs(%arg{} : {})\n",
+                                value_var,
+                                source_type,
+                                param_idx,
+                                target_type
+                            ));
+                        }
+                    }
+                }
+                
+                // Assignment doesn't produce a value
+                None
+            }
+            ExprKind::Seq(exprs) => {
+                // Process sequence expressions, return the result of the last expression
+                let mut last_result = None;
+                for expr in exprs {
+                    last_result = walk_expr(expr, fun, param_to_local, alloc_counter, context, body_ops);
+                }
+                last_result
+            }
+            ExprKind::Lit(_) => {
+                // Literals don't produce SSA values in this context
+                None
+            }
+            _ => {
+                // Other expression types not yet supported
+                None
+            }
+        }
+    }
+    
+    walk_expr(&fun.body.body, fun, param_to_local, alloc_counter, context, &mut body_ops);
+    body_ops
+}
+
 /// Generate load operations for GPU parameters
+/// Returns (operations_string, param_to_local_map, final_alloc_counter)
 fn generate_load_operations(
     fun: &crate::ast::FunDef, 
     param_usage: &std::collections::HashMap<String, ParameterUsage>,
     context: &Context
-) -> String {
+) -> (String, std::collections::HashMap<String, String>, usize) {
     use crate::ast::{DataTyKind, Memory, TyKind};
     use std::collections::HashMap;
     
@@ -617,19 +801,24 @@ fn generate_load_operations(
                     };
                     
                     // Generate alloc and load operations
-                    load_ops.push_str(&format!("    %alloc{} = memref.alloc() : {}\n", alloc_counter, ub_type));
-                    load_ops.push_str(&format!("    hivm.hir.load ins(%arg{} : {}) outs(%alloc{} : {})\n", 
-                        i, gm_type, alloc_counter, ub_type));
+                    let alloc_name = if alloc_counter == 0 {
+                        "%alloc".to_string()
+                    } else {
+                        format!("%alloc_{}", alloc_counter - 1)
+                    };
+                    load_ops.push_str(&format!("    {} = memref.alloc() : {}\n", alloc_name, ub_type));
+                    load_ops.push_str(&format!("    hivm.hir.load ins(%arg{} : {}) outs({} : {})\n", 
+                        i, gm_type, alloc_name, ub_type));
                     
                     // Map parameter to its local version
-                    param_to_local.insert(param_name, format!("%alloc{}", alloc_counter));
+                    param_to_local.insert(param_name, alloc_name);
                     alloc_counter += 1;
                 }
             }
         }
     }
     
-    load_ops
+    (load_ops, param_to_local, alloc_counter)
 }
 
 /// Generate function with body including load operations for GPU parameters
@@ -676,8 +865,12 @@ fn generate_function_with_body(fun: &crate::ast::FunDef, context: &Context) -> S
     let param_usage = collect_parameter_usage(fun);
     
     // Generate load operations for GPU parameters (only for read usage)
-    let load_ops = generate_load_operations(fun, &param_usage, context);
+    let (load_ops, param_to_local, mut alloc_counter) = generate_load_operations(fun, &param_usage, context);
     signature.push_str(&load_ops);
+    
+    // Generate body operations (binary operations, etc.)
+    let body_ops = generate_body_operations(fun, &param_to_local, &mut alloc_counter, context);
+    signature.push_str(&body_ops);
     
     signature.push_str("    return\n  }\n");
     signature

@@ -1,14 +1,15 @@
 ---
 source: tests/mlir/core.rs
-assertion_line: 4
 expression: output
 ---
 module {
-  func.func @memory_load(%arg0: memref<16xi16, #hivm.address_space<gm>>, %arg1: memref<16xi16, #hivm.address_space<gm>>) attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>} {
+  func.func @div(%arg0: memref<16xi16, #hivm.address_space<gm>>, %arg1: memref<16xi16, #hivm.address_space<gm>>) attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>} {
     %alloc = memref.alloc() : memref<16xi16, #hivm.address_space<ub>>
     hivm.hir.load ins(%arg0 : memref<16xi16, #hivm.address_space<gm>>) outs(%alloc : memref<16xi16, #hivm.address_space<ub>>)
     %alloc_0 = memref.alloc() : memref<16xi16, #hivm.address_space<ub>>
     hivm.hir.load ins(%arg1 : memref<16xi16, #hivm.address_space<gm>>) outs(%alloc_0 : memref<16xi16, #hivm.address_space<ub>>)
+    %alloc_1 = memref.alloc() : memref<16xi16, #hivm.address_space<ub>>
+    hivm.hir.vdiv ins(%alloc, %alloc_0 : memref<16xi16, #hivm.address_space<ub>>, memref<16xi16, #hivm.address_space<ub>>) outs(%alloc_1 : memref<16xi16, #hivm.address_space<ub>>)
     return
   }
 }
