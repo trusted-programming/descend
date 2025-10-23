@@ -17,14 +17,12 @@ pub trait ToMlir {
 }
 
 impl Nat {
-    fn to_dimension_i64(self: &Self) -> i64 {
+    fn to_dimension(self: &Self) -> Vec<i64> {
         // Try to evaluate the Nat with an empty context
         let nat_ctx = NatCtx::new();
         match self.eval(&nat_ctx) {
-            Ok(size) => size as i64,
-            Err(_) => panic!(
-                "Array dimensions must be compile-time known. Dynamic arrays are not supported."
-            ),
+            Ok(size) => vec![size as i64],
+            Err(_) => vec![],
         }
     }
 }
@@ -149,8 +147,8 @@ fn ref_array_to_mlir<'c>(
 ) -> Type<'c> {
     // Array reference -> memref with dimensions
     let elem_type = elem_ty.to_mlir(context);
-    let dim = size.to_dimension_i64();
-    let base_type: Type<'c> = MemRefType::new(elem_type, &[dim], None, None).into();
+    let dim = size.to_dimension();
+    let base_type: Type<'c> = MemRefType::new(elem_type, &dim, None, None).into();
 
     // Add HIVM address space if needed
     let base_str = base_type.to_string();
@@ -169,8 +167,8 @@ fn ref_at_to_mlir<'c>(inner: &DataTy, mem: &Memory, context: &'c Context) -> Typ
         }
         DataTyKind::Array(elem_ty, size) | DataTyKind::ArrayShape(elem_ty, size) => {
             let elem_type = elem_ty.to_mlir(context);
-            let dim = size.to_dimension_i64();
-            MemRefType::new(elem_type, &[dim], None, None).into()
+            let dim = size.to_dimension();
+            MemRefType::new(elem_type, &dim, None, None).into()
         }
         DataTyKind::Tuple(_) => {
             unimplemented!("Tuple references with At not yet supported in MLIR conversion")
@@ -239,13 +237,13 @@ impl ToMlir for DataTy {
             DataTyKind::Ident(ident) => ident.to_mlir(context),
             DataTyKind::Array(elem_ty, size) => {
                 let elem_type = elem_ty.to_mlir(context);
-                let dim = size.to_dimension_i64();
-                MemRefType::new(elem_type, &[dim], None, None).into()
+                let dim = size.to_dimension();
+                MemRefType::new(elem_type, &dim, None, None).into()
             }
             DataTyKind::ArrayShape(elem_ty, size) => {
                 let elem_type = elem_ty.to_mlir(context);
-                let dim = size.to_dimension_i64();
-                MemRefType::new(elem_type, &[dim], None, None).into()
+                let dim = size.to_dimension();
+                MemRefType::new(elem_type, &dim, None, None).into()
             }
             DataTyKind::Struct(_) => {
                 unimplemented!("Struct types not yet supported in MLIR conversion")
