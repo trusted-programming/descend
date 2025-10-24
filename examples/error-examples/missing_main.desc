@@ -1,0 +1,3 @@
+fn missing_main() -[t: cpu.thread]-> () <'a> {
+    ()
+}

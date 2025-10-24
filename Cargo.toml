@@ -1,40 +1,28 @@
 [package]
 name = "descend"
-version = "0.1.0"
-authors = [
-    "Luca Carlig <luca.carlig@huawei.com>",
-    "Köpcke <bastian.koepcke@uni-muenster.de>",
-]
-edition = "2021"
-
-# Allow specific lints globally
-[package.metadata.clippy]
-unused_variables = "allow"
-dead_code = "allow"
-unused_imports = "allow"
-unreachable_code = "allow"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
-clap = { version = "4.5", features = ["derive"] }
-insta = "1.43.2"
+clap = { version = "4.5.50", features = ["derive"] }
 melior = { version = "0.25", features = ["ods-dialects"] }
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies.peg]
-version = "0.8.0"
-
-[dependencies.annotate-snippets]
-version = "0.9.0"
-features = ["color"]
-
-[dependencies.descend_derive]
-path = "./descend_derive"
-
-[build-dependencies]
-melior = { version = "0.25", features = ["ods-dialects"] }
+miette = { version = "7.6.0", features = ["fancy", "syntect-highlighter"] }
+thiserror = "2.0.17"
+peg = "0.8.5"
+descend_derive = { path = "./descend_derive" }
 
 [dev-dependencies]
 insta = { version = "1.43.2", features = ["glob"] }
 
 [workspace]
 members = ["descend_derive"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+authors = [
+    "Luca Carlig <luca.carlig@huawei.com>",
+    "Köpcke <bastian.koepcke@uni-muenster.de>",
+]
+edition = "2024"

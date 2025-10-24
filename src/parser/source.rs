@@ -1,6 +1,6 @@
 //! Source file representation
 
-use crate::error::{ErrorReported, FileIOError};
+use crate::error::{CompileError, FileIOError};
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct SourceCode<'a> {
@@ -14,9 +14,9 @@ pub struct SourceCode<'a> {
 
 impl<'a> SourceCode<'a> {
     /// Read source code from file
-    pub fn from_file(path: &'a str) -> Result<Self, ErrorReported> {
-        let bytes =
-            std::fs::read(path).map_err(|io_error| FileIOError::new(path, io_error).emit())?;
+    pub fn from_file(path: &'a str) -> Result<Self, CompileError> {
+        let bytes = std::fs::read(path)
+            .map_err(|io_error| FileIOError::new(path, io_error).to_compile_error())?;
         let source = String::from_utf8_lossy(&bytes).to_string();
         Ok(Self {
             line_offsets: Self::line_offsets(&source),
@@ -61,6 +61,12 @@ impl<'a> SourceCode<'a> {
         } else {
             None
         }
+    }
+
+    /// Get offset corresponding to line and column (both 0-based)
+    pub fn get_offset(&self, line_num: u32, col_num: u32) -> usize {
+        let line_offset = self.line_offsets[line_num as usize] as usize;
+        line_offset + col_num as usize
     }
 
     /// Get line and column (both 0-based) corresponding to an offset in the

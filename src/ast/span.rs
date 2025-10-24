@@ -19,3 +19,12 @@ impl Span {
         }
     }
 }
+
+impl From<Span> for miette::SourceSpan {
+    fn from(span: Span) -> Self {
+        miette::SourceSpan::new(
+            miette::SourceOffset::from(span.begin as usize),
+            (span.end - span.begin) as usize
+        )
+    }
+}

@@ -154,7 +154,10 @@ impl Constrainable for FnTy {
         substitute(constr_map, other);
 
         if self.param_sigs.len() != other.param_sigs.len() {
-            return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown(
+                        "function parameter count mismatch",
+                        None,
+                    ));
         }
         // TODO refactor
         // substitute result of unification for every following unification
@@ -234,7 +237,10 @@ impl Constrainable for ExecExpr {
                 if i1 == i2 {
                     return Ok(());
                 } else {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown(
+                        "exec expression identifiers do not match",
+                        None,
+                    ));
                 }
             }
             (BaseExec::CpuThread, BaseExec::CpuThread) => {}
@@ -242,7 +248,12 @@ impl Constrainable for ExecExpr {
                 gdim1.constrain(gdim2, constr_map, prv_rels)?;
                 bdim1.constrain(bdim2, constr_map, prv_rels)?;
             }
-            _ => return Err(UnifyError::CannotUnify),
+            _ => {
+                return Err(UnifyError::cannot_unify_unknown(
+                    "unification failed",
+                    None,
+                ));
+            }
         }
 
         let mut i = 0;
@@ -264,20 +275,34 @@ impl Constrainable for ExecExpr {
                 (ExecPathElem::ForAll(dl), ExecPathElem::ForAll(dr))
                 | (ExecPathElem::ToThreads(dl), ExecPathElem::ToThreads(dr)) => {
                     if dl != dr {
-                        return Err(UnifyError::CannotUnify);
+                        return Err(UnifyError::cannot_unify_unknown(
+                            "execution path element unification failed",
+                            None,
+                        ));
                     }
                 }
                 (ExecPathElem::TakeRange(rl), ExecPathElem::TakeRange(rr)) => {
                     if rl.split_dim != rr.split_dim {
-                        return Err(UnifyError::CannotUnify);
+                        return Err(UnifyError::cannot_unify_unknown(
+                            "execution path element unification failed",
+                            None,
+                        ));
                     }
                     if rl.left_or_right != rr.left_or_right {
-                        return Err(UnifyError::CannotUnify);
+                        return Err(UnifyError::cannot_unify_unknown(
+                            "execution path element unification failed",
+                            None,
+                        ));
                     }
                     rl.pos.constrain(&mut rr.pos, constr_map, prv_rels)?
                 }
                 (ExecPathElem::ToWarps, ExecPathElem::ToWarps) => {}
-                _ => return Err(UnifyError::CannotUnify),
+                _ => {
+                    return Err(UnifyError::cannot_unify_unknown(
+                        "unification failed",
+                        None,
+                    ));
+                }
             }
 
             i += 1;
@@ -307,7 +332,12 @@ impl Constrainable for Ty {
                 fn_ty1.constrain(fn_ty2, constr_map, prv_rels)
             }
             (TyKind::Data(dty1), TyKind::Data(dty2)) => dty1.constrain(dty2, constr_map, prv_rels),
-            _ => Err(UnifyError::CannotUnify),
+            _ => Err(UnifyError::cannot_unify_with_string(
+                Ty::new(self.ty.clone()),
+                Ty::new(other.ty.clone()),
+                "cannot unify different type kinds",
+                None,
+            )),
         }
     }
 }
@@ -335,7 +365,10 @@ impl Constrainable for DataTy {
                 } else if i1 == i2 {
                     return Ok(());
                 } else {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown(
+                        "unification failed",
+                        None,
+                    ));
                 }
                 substitute(constr_map, self);
                 substitute(constr_map, other);
@@ -350,7 +383,10 @@ impl Constrainable for DataTy {
             }
             (DataTyKind::Scalar(sty1), DataTyKind::Scalar(sty2)) => {
                 if sty1 != sty2 {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown(
+                        "unification failed",
+                        None,
+                    ));
                 } else {
                     return Ok(());
                 }
@@ -370,7 +406,10 @@ impl Constrainable for DataTy {
                 } = ref2.as_mut();
 
                 if own1 != own2 {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown(
+                        "unification failed",
+                        None,
+                    ));
                 }
                 rgn1.constrain(rgn2, constr_map, prv_rels)?;
                 substitute(constr_map, &mut **dty1);
@@ -412,7 +451,10 @@ impl Constrainable for DataTy {
                     (remain_lhs.split_first_mut(), remain_rhs.split_first_mut())
                 {
                     if next_lhs.0 != next_rhs.0 {
-                        return Err(UnifyError::CannotUnify);
+                        return Err(UnifyError::cannot_unify_unknown(
+                            "execution path element unification failed",
+                            None,
+                        ));
                     }
                     next_lhs
                         .1
@@ -450,7 +492,10 @@ impl Constrainable for DataTy {
             }
             (DataTyKind::Atomic(sty1), DataTyKind::Atomic(sty2)) => {
                 if sty1 != sty2 {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown(
+                        "unification failed",
+                        None,
+                    ));
                 } else {
                     return Ok(());
                 }
@@ -466,7 +511,12 @@ impl Constrainable for DataTy {
                 substitute(constr_map, self);
                 substitute(constr_map, other);
             }
-            _ => return Err(UnifyError::CannotUnify),
+            _ => {
+                return Err(UnifyError::cannot_unify_unknown(
+                    "unification failed",
+                    None,
+                ));
+            }
         }
         Ok(())
     }
@@ -504,7 +554,10 @@ impl Constrainable for ExecTy {
                 ExecTyKind::NpuToThreads(rdim_compo, r_inner),
             ) => {
                 if ldim_compo != rdim_compo {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown(
+                        "unification failed",
+                        None,
+                    ));
                 }
                 l_inner.constrain(r_inner, constr_map, prv_rels)
             }
@@ -512,7 +565,10 @@ impl Constrainable for ExecTy {
             | (ExecTyKind::NpuThreadGrp(ldim), ExecTyKind::NpuThreadGrp(rdim)) => {
                 ldim.constrain(rdim, constr_map, prv_rels)
             }
-            _ => Err(UnifyError::CannotUnify),
+            _ => Err(UnifyError::cannot_unify_unknown(
+                "unification failed",
+                None,
+            )),
         }
     }
 }
@@ -546,7 +602,10 @@ impl Constrainable for Dim {
             (Dim::X(ld), Dim::X(rd)) | (Dim::Y(ld), Dim::Y(rd)) | (Dim::Z(ld), Dim::Z(rd)) => {
                 ld.0.constrain(&mut rd.0, constr_map, prv_rels)
             }
-            _ => Err(UnifyError::CannotUnify),
+            _ => Err(UnifyError::cannot_unify_unknown(
+                "unification failed",
+                None,
+            )),
         }
     }
 }
@@ -589,7 +648,10 @@ impl Nat {
         if n1 == n2 {
             Ok(())
         } else {
-            Err(UnifyError::CannotUnify)
+            Err(UnifyError::cannot_unify_unknown(
+                "natural number expressions do not match",
+                None,
+            ))
         }
     }
 }
@@ -679,7 +741,10 @@ impl Constrainable for Memory {
             (Memory::Ident(i), o) => o.bind_to(i, constr_map),
             (s, Memory::Ident(i)) => s.bind_to(i, constr_map),
             (mem1, mem2) if mem1 == mem2 => Ok(()),
-            _ => Err(UnifyError::CannotUnify),
+            _ => Err(UnifyError::cannot_unify_unknown(
+                "unification failed",
+                None,
+            )),
         }
     }
 }

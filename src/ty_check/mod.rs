@@ -1,6 +1,6 @@
 mod borrow_check;
 mod ctxs;
-mod error;
+pub mod error;
 mod exec;
 mod infer_kinded_args;
 mod pl_expr;
@@ -12,7 +12,7 @@ use self::pl_expr::PlExprTyCtx;
 use crate::ast::internal::{Frame, IdentTyped, Loan, Place, PrvMapping};
 use crate::ast::utils;
 use crate::ast::*;
-use crate::error::ErrorReported;
+use crate::ty_check::error::TyError;
 use ctxs::{AccessCtx, GlobalCtx, KindCtx, TyCtx};
 use error::*;
 use std::collections::HashSet;
@@ -36,7 +36,7 @@ pub(crate) use matches_dty;
 // ∀ε ∈ Σ. Σ ⊢ ε
 // --------------
 //      ⊢ Σ
-pub fn ty_check(compil_unit: &mut CompilUnit) -> Result<(), ErrorReported> {
+pub fn ty_check(compil_unit: &mut CompilUnit) -> Result<(), TyError> {
     let mut gl_ctx = GlobalCtx::new(
         compil_unit,
         pre_decl::fun_decls()
@@ -46,14 +46,10 @@ pub fn ty_check(compil_unit: &mut CompilUnit) -> Result<(), ErrorReported> {
     );
     let mut nat_ctx = NatCtx::new();
     if let Some(mut main_fun) = gl_ctx.pop_fun_def("main") {
-        if let Err(err) = ty_check_global_fun_def(&mut gl_ctx, &mut nat_ctx, &mut main_fun) {
-            err.emit(compil_unit.source);
-            return Err(ErrorReported);
-        } else {
-            gl_ctx.push_fun_checked_under_nats(main_fun, Box::from(vec![]));
-        }
+        ty_check_global_fun_def(&mut gl_ctx, &mut nat_ctx, &mut main_fun)?;
+        gl_ctx.push_fun_checked_under_nats(main_fun, Box::from(vec![]));
     } else {
-        panic!("Main function not found");
+        return Err(TyError::MissingMain);
     }
     Ok(())
 }
@@ -234,7 +230,7 @@ fn ty_check_hole(ctx: &ExprTyCtx) -> TyResult<Ty> {
             DataTyKind::Ident(Ident::new_impli(&utils::fresh_name("hole"))),
         )))))
     } else {
-        Err(TyError::UnsafeRequired)
+        Err(TyError::UnsafeRequired(Expr::new(ExprKind::Hole)))
     }
 }
 
@@ -326,7 +322,9 @@ fn ty_check_for_nat(
                 ));
             }
         } else {
-            return Err(TyError::UnexpectedType);
+            return Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(
+                DataTy::new(DataTyKind::Scalar(ScalarTy::I32)),
+            )))));
         }
     }
     Ok(Ty::new(TyKind::Data(Box::new(DataTy::new(
@@ -370,7 +368,7 @@ fn ty_check_for(
                 return Err(TyError::String(format!(
                     "Expected reference to array data type, but found {:?}",
                     reff.dty.as_ref(),
-                )))
+                )));
             }
         },
         // DataTyKind::Range => DataTyKind::Scalar(ScalarTy::I32),
@@ -721,12 +719,14 @@ fn ty_check_assign_place(
     let e_dty = if let TyKind::Data(dty) = &mut e.ty.as_mut().unwrap().as_mut().ty {
         dty.as_mut()
     } else {
-        return Err(TyError::UnexpectedType);
+        return Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(
+            DataTy::new(DataTyKind::Scalar(ScalarTy::I32)),
+        )))));
     };
     let err = unify::sub_unify(ctx.kind_ctx, ctx.ty_ctx, e_dty, &mut place_ty);
     if let Err(err) = err {
         return Err(match err {
-            UnifyError::CannotUnify => {
+            UnifyError::CannotUnify { .. } => {
                 TyError::MismatchedDataTypes(place_ty.clone(), e_dty.clone(), e.clone())
             }
             err => TyError::from(err),
@@ -819,17 +819,21 @@ fn ty_check_idx_assign(
             DataTyKind::ArrayShape(sdty, n) if matches!(&sdty.dty, DataTyKind::Scalar(_)) => {
                 (n, reff.own, &reff.mem, sdty.as_ref())
             }
-            DataTyKind::ArrayShape(_, _) => return Err(TyError::AssignToView),
+            DataTyKind::ArrayShape(_, _) => {
+                return Err(TyError::AssignToView(PlaceExpr::new(PlaceExprKind::Ident(
+                    Ident::new("array_view"),
+                ))));
+            }
             _ => {
                 return Err(TyError::String(
                     "Expected a reference to array view.".to_string(),
-                ))
+                ));
             }
         },
         _ => {
             return Err(TyError::String(
                 "Trying to index into non array type.".to_string(),
-            ))
+            ));
         }
     };
     if !dty.is_fully_alive() {
@@ -897,15 +901,13 @@ fn ty_check_binary_op(
     };
     match bin_op {
         // Shift operators only allow integer values (lhs_ty and rhs_ty can differ!)
-        BinOp::Shl
-        | BinOp::Shr => match (&lhs_ty.ty, &rhs_ty.ty) {
+        BinOp::Shl | BinOp::Shr => match (&lhs_ty.ty, &rhs_ty.ty) {
             (TyKind::Data(dty1), TyKind::Data(dty2)) => match (&dty1.dty, &dty2.dty) {
                 (
                     DataTyKind::Scalar(ScalarTy::U8)
                     | DataTyKind::Scalar(ScalarTy::U32)
                     | DataTyKind::Scalar(ScalarTy::U64)
-                    | DataTyKind::Scalar(ScalarTy::I32)
-                    ,
+                    | DataTyKind::Scalar(ScalarTy::I32),
                     DataTyKind::Scalar(ScalarTy::U8)
                     | DataTyKind::Scalar(ScalarTy::U32)
                     | DataTyKind::Scalar(ScalarTy::U64)
@@ -914,53 +916,34 @@ fn ty_check_binary_op(
                 _ => Err(TyError::String(format!(
                     "Expected integer types for operator {}, instead got\n Lhs: {:?}\n Rhs: {:?}",
                     bin_op, lhs, rhs
-                )))
-            }
+                ))),
+            },
             _ => Err(TyError::String(format!(
                 "Expected integer types for operator {}, instead got\n Lhs: {:?}\n Rhs: {:?}",
                 bin_op, lhs, rhs
             ))),
-        }
+        },
         _ => match (&lhs_ty.ty, &rhs_ty.ty) {
             (TyKind::Data(dty1), TyKind::Data(dty2)) => match (&dty1.dty, &dty2.dty) {
-                (
-                    DataTyKind::Scalar(ScalarTy::F32),
-                    DataTyKind::Scalar(ScalarTy::F32),
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::U8),
-                    DataTyKind::Scalar(ScalarTy::U8),
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::U32),
-                    DataTyKind::Scalar(ScalarTy::U32),
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::U64),
-                    DataTyKind::Scalar(ScalarTy::U64),
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::F64),
-                    DataTyKind::Scalar(ScalarTy::F64)
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::I32),
-                    DataTyKind::Scalar(ScalarTy::I32),
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::Bool),
-                    DataTyKind::Scalar(ScalarTy::Bool),
-                ) => Ok(ret_dty),
+                (DataTyKind::Scalar(ScalarTy::F32), DataTyKind::Scalar(ScalarTy::F32))
+                | (DataTyKind::Scalar(ScalarTy::U8), DataTyKind::Scalar(ScalarTy::U8))
+                | (DataTyKind::Scalar(ScalarTy::U32), DataTyKind::Scalar(ScalarTy::U32))
+                | (DataTyKind::Scalar(ScalarTy::U64), DataTyKind::Scalar(ScalarTy::U64))
+                | (DataTyKind::Scalar(ScalarTy::F64), DataTyKind::Scalar(ScalarTy::F64))
+                | (DataTyKind::Scalar(ScalarTy::I32), DataTyKind::Scalar(ScalarTy::I32))
+                | (DataTyKind::Scalar(ScalarTy::Bool), DataTyKind::Scalar(ScalarTy::Bool)) => {
+                    Ok(ret_dty)
+                }
                 _ => Err(TyError::String(format!(
                     "Expected the same number types for operator {}, instead got\n Lhs: {:?}\n Rhs: {:?}",
                     bin_op, dty1, dty2
-                )))
-            }
+                ))),
+            },
             _ => Err(TyError::String(format!(
                 "Expected the same number types for operator {}, instead got\n Lhs: {:?}\n Rhs: {:?}",
                 bin_op, lhs, rhs
             ))),
-        }
+        },
     }
 }
 
@@ -995,8 +978,7 @@ fn ty_check_cast(ctx: &mut ExprTyCtx, e: &mut Expr, dty: &DataTy) -> TyResult<Ty
         | DataTyKind::Scalar(ScalarTy::I32)
         | DataTyKind::Scalar(ScalarTy::U8)
         | DataTyKind::Scalar(ScalarTy::U32)
-        | DataTyKind::Scalar(ScalarTy::U64)
-        => match dty.dty {
+        | DataTyKind::Scalar(ScalarTy::U64) => match dty.dty {
             DataTyKind::Scalar(ScalarTy::I32)
             | DataTyKind::Scalar(ScalarTy::U8)
             | DataTyKind::Scalar(ScalarTy::U32)
@@ -1008,8 +990,7 @@ fn ty_check_cast(ctx: &mut ExprTyCtx, e: &mut Expr, dty: &DataTy) -> TyResult<Ty
                 e_ty, dty
             ))),
         },
-        DataTyKind::Scalar(ScalarTy::Bool)
-        => match dty.dty {
+        DataTyKind::Scalar(ScalarTy::Bool) => match dty.dty {
             DataTyKind::Scalar(ScalarTy::I32)
             | DataTyKind::Scalar(ScalarTy::U8)
             | DataTyKind::Scalar(ScalarTy::U32)
@@ -1383,7 +1364,9 @@ fn ty_check_proj(ctx: &mut ExprTyCtx, e: &mut Expr, i: usize) -> TyResult<Ty> {
     let e_dty = if let TyKind::Data(dty) = &e.ty.as_ref().unwrap().ty {
         dty.as_ref()
     } else {
-        return Err(TyError::UnexpectedType);
+        return Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(
+            DataTy::new(DataTyKind::Scalar(ScalarTy::I32)),
+        )))));
     };
     let elem_ty = proj_elem_dty(e_dty, i);
     Ok(Ty::new(TyKind::Data(Box::new(elem_ty?))))
@@ -1438,7 +1421,9 @@ fn infer_pattern_ident_tys(
     let pattern_dty = if let TyKind::Data(dty) = &pattern_ty.ty {
         dty.as_ref()
     } else {
-        return Err(TyError::UnexpectedType);
+        return Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(
+            DataTy::new(DataTyKind::Scalar(ScalarTy::I32)),
+        )))));
     };
     match (pattern, &pattern_dty.dty) {
         (Pattern::Ident(mutbl, ident), _) => {
@@ -1458,7 +1443,12 @@ fn infer_pattern_ident_tys(
             }
             Ok(())
         }
-        _ => Err(TyError::PatternAndTypeDoNotMatch),
+        _ => Err(TyError::PatternAndTypeDoNotMatch(
+            Pattern::Ident(Mutability::Const, Ident::new("unknown")),
+            Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Scalar(
+                ScalarTy::I32,
+            ))))),
+        )),
     }
 }
 
@@ -1699,7 +1689,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                     Provenance::Value(prv) => {
                         let elem_ty = Ty::new(TyKind::Data(reff.dty.clone()));
                         if !elem_ty.is_fully_alive() {
-                            return Err(TyError::ReferenceToDeadTy);
+                            return Err(TyError::ReferenceToDeadTy(PlaceExpr::new(PlaceExprKind::Ident(Ident::new("reference")))));
                         }
                         let loans = ty_ctx.loans_in_prv(prv)?;
                         if !loans.is_empty() {
@@ -1710,7 +1700,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                                     own: l_own,
                                 } = loan;
                                 if l_own != &reff.own {
-                                    return Err(TyError::ReferenceToWrongOwnership);
+                                    return Err(TyError::ReferenceToWrongOwnership(PlaceExpr::new(PlaceExprKind::Ident(Ident::new("reference")))));
                                 }
                                 let borrowed_pl_expr = place_expr.clone();
                                 // self.place_expr_ty_under_exec_own(
@@ -1722,7 +1712,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                                 // )?;
                                 if let TyKind::Data(pl_expr_dty) = borrowed_pl_expr.ty.unwrap().ty {
                                     if !pl_expr_dty.is_fully_alive() {
-                                        return Err(TyError::ReferenceToDeadTy);
+                                        return Err(TyError::ReferenceToDeadTy(PlaceExpr::new(PlaceExprKind::Ident(Ident::new("reference")))));
                                     }
                                     if dty.occurs_in(&pl_expr_dty) {
                                         exists = true;
@@ -1737,7 +1727,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                                             view type reference."
                                     )
                                 } else {
-                                    return Err(TyError::ReferenceToIncompatibleType);
+                                    return Err(TyError::ReferenceToIncompatibleType(PlaceExpr::new(PlaceExprKind::Ident(Ident::new("reference")))));
                                 }
                             }
                         }
@@ -1866,7 +1856,9 @@ fn legal_exec_under_current(ctx: &ExprTyCtx, exec: &ExecExpr) -> TyResult<()> {
             _ => {
                 let mut print_state = PrintState::new();
                 print_state.print_exec_expr(exec);
-                return Err(TyError::IllegalExec);
+                return Err(TyError::IllegalExec(ExecExpr::new(ExecExprKind::new(
+                    BaseExec::CpuThread,
+                ))));
             }
         }
     }

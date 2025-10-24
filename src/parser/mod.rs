@@ -7,14 +7,18 @@ use core::iter;
 use error::ParseError;
 use std::collections::HashMap;
 
-use crate::error::ErrorReported;
+use crate::ast::visit_mut::VisitMut;
+use crate::error::{CompileError, ParseErrorData};
 pub use source::*;
 
-use crate::ast::visit_mut::VisitMut;
-
-pub fn parse<'a>(source: &'a SourceCode<'a>) -> Result<CompilUnit<'a>, ErrorReported> {
+pub fn parse<'a>(source: &'a SourceCode<'a>) -> Result<CompilUnit<'a>, CompileError> {
     let parser = Parser::new(source);
-    let mut items = parser.parse().map_err(|err| err.emit())?;
+    let mut items = parser.parse().map_err(|err| {
+        CompileError::Parse(ParseErrorData {
+            message: format!("Parse error: {}", err),
+            span: None, // TODO: Extract span from ParseError
+        })
+    })?;
     // TODO refactor to not require unnecessary copying out of items
     let struct_copies = items
         .iter()
@@ -290,13 +294,13 @@ fn replace_struct_idents_with_specific_struct_dtys(struct_dtys: &[StructDecl], i
 pub mod error {
     use crate::error::ErrorReported;
     use crate::parser::{Parser, SourceCode};
-    use annotate_snippets::display_list::DisplayList;
-    use annotate_snippets::snippet::Snippet;
+    use miette::Diagnostic;
     use peg::error::ParseError as PegError;
     use peg::str::LineCol;
 
     #[must_use]
-    #[derive(Debug)]
+    #[derive(Debug, Diagnostic)]
+    #[diagnostic(severity(Error), code("parse_error"))]
     pub struct ParseError<'a> {
         parser: &'a Parser<'a>,
         err: PegError<LineCol>,
@@ -313,17 +317,25 @@ pub mod error {
                 u32::try_from(self.err.location.line).expect("Source file is unexpectedly large");
             let column_num =
                 u32::try_from(self.err.location.column).expect("Source file is unexpectedly large");
-            let snippet = single_line_parse_snippet(
+            let error = single_line_parse_snippet(
                 self.parser.source,
                 &label,
                 line_num,
                 column_num,
                 column_num + 1,
             );
-            println!("{}", DisplayList::from(snippet));
+            eprintln!("{}", error);
             ErrorReported
         }
     }
+
+    impl<'a> std::fmt::Display for ParseError<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "Parse error: expected {}", self.err.expected)
+        }
+    }
+
+    impl<'a> std::error::Error for ParseError<'a> {}
 
     fn single_line_parse_snippet<'a>(
         source: &'a SourceCode<'a>,
@@ -331,7 +343,7 @@ pub mod error {
         line_num: u32,
         begin_column: u32,
         end_column: u32,
-    ) -> Snippet<'a> {
+    ) -> miette::Report {
         // 1-based offsets to 0-based offsets
         crate::error::single_line_snippet(
             source,
@@ -1361,17 +1373,21 @@ mod tests {
             ))))),
             "does not recognize type of unique i32 reference in cpu heap with provenance 'a"
         );
-        assert_eq!(descend::ty("&b shrd npu.global [f32;N]"), Ok(Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Ref(
-            Box::new(RefDty::new(
-                        Provenance::Ident(Ident::new("b")),
-                        Ownership::Shrd,
-                        Memory::NpuGm,
-                        DataTy::new(DataTyKind::Array(
-                            Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::F32))),
-                            Nat::Ident(Ident::new("N"))
-                        ))
-                    )))))),
-        )), "does not recognize type of shared [f32] reference in npu global memory with provenance b");
+        assert_eq!(
+            descend::ty("&b shrd npu.global [f32;N]"),
+            Ok(Ty::new(TyKind::Data(Box::new(DataTy::new(
+                DataTyKind::Ref(Box::new(RefDty::new(
+                    Provenance::Ident(Ident::new("b")),
+                    Ownership::Shrd,
+                    Memory::NpuGm,
+                    DataTy::new(DataTyKind::Array(
+                        Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::F32))),
+                        Nat::Ident(Ident::new("N"))
+                    ))
+                )))
+            ))),)),
+            "does not recognize type of shared [f32] reference in npu global memory with provenance b"
+        );
     }
 
     #[test]

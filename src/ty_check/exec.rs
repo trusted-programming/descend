@@ -2,7 +2,7 @@ use super::{
     BaseExec, BinOpNat, Dim, Dim1d, Dim2d, DimCompo, ExecExpr, ExecPathElem, ExecTy, ExecTyKind,
     IdentExec, Nat, TyCtx, TyError, TyResult,
 };
-use crate::ast::{LeftOrRight, NatCtx};
+use crate::ast::{LeftOrRight, NatCtx, Ty, TyKind, DataTy, DataTyKind, ScalarTy};
 
 pub(super) fn ty_check(
     nat_ctx: &NatCtx,
@@ -20,7 +20,7 @@ pub(super) fn ty_check(
                     inline_exec.ty.as_ref().unwrap().ty.clone()
                 }
             } else {
-                return Err(TyError::IllegalExec);
+                return Err(TyError::IllegalExec(exec_expr.clone()));
             }
         }
         BaseExec::CpuThread => ExecTyKind::CpuThread,
@@ -85,7 +85,7 @@ fn ty_check_exec_to_threads(d: DimCompo, exec_ty: &ExecTyKind) -> TyResult<ExecT
             _ => unimplemented!(),
         }
     } else {
-        Err(TyError::UnexpectedType)
+        Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::I32)))))))
     }
 }
 
@@ -215,7 +215,7 @@ pub fn remove_dim(dim: &Dim, dim_compo: DimCompo) -> TyResult<(Option<Dim>, Dim)
         (Dim::X(_), DimCompo::X) | (Dim::Y(_), DimCompo::Y) | (Dim::Z(_), DimCompo::Z) => {
             Ok((None, dim.clone()))
         }
-        _ => Err(TyError::IllegalDimension),
+        _ => Err(TyError::IllegalDimension(Nat::Lit(0))),
     }
 }
 
@@ -329,7 +329,7 @@ fn split_dim(split_dim: DimCompo, pos: Nat, dim: Dim) -> TyResult<(Dim, Dim)> {
                     Nat::BinOp(BinOpNat::Sub, Box::new(d.1), Box::new(pos)),
                 ),
             ),
-            DimCompo::Z => return Err(TyError::IllegalDimension),
+            DimCompo::Z => return Err(TyError::IllegalDimension(Nat::Lit(0))),
         },
         Dim::XZ(d) => match split_dim {
             DimCompo::X => (
@@ -340,7 +340,7 @@ fn split_dim(split_dim: DimCompo, pos: Nat, dim: Dim) -> TyResult<(Dim, Dim)> {
                     d.1,
                 ),
             ),
-            DimCompo::Y => return Err(TyError::IllegalDimension),
+            DimCompo::Y => return Err(TyError::IllegalDimension(Nat::Lit(1))),
             DimCompo::Z => (
                 Dim::new_2d(Dim::XZ, d.0.clone(), pos.clone()),
                 Dim::new_2d(
@@ -351,7 +351,7 @@ fn split_dim(split_dim: DimCompo, pos: Nat, dim: Dim) -> TyResult<(Dim, Dim)> {
             ),
         },
         Dim::YZ(d) => match split_dim {
-            DimCompo::X => return Err(TyError::IllegalDimension),
+            DimCompo::X => return Err(TyError::IllegalDimension(Nat::Lit(2))),
             DimCompo::Y => (
                 Dim::new_2d(Dim::YZ, pos.clone(), d.1.clone()),
                 Dim::new_2d(
@@ -379,7 +379,7 @@ fn split_dim(split_dim: DimCompo, pos: Nat, dim: Dim) -> TyResult<(Dim, Dim)> {
                     ),
                 )
             } else {
-                return Err(TyError::IllegalDimension);
+                return Err(TyError::IllegalDimension(Nat::Lit(0)));
             }
         }
         Dim::Y(d) => {
@@ -392,7 +392,7 @@ fn split_dim(split_dim: DimCompo, pos: Nat, dim: Dim) -> TyResult<(Dim, Dim)> {
                     ),
                 )
             } else {
-                return Err(TyError::IllegalDimension);
+                return Err(TyError::IllegalDimension(Nat::Lit(0)));
             }
         }
         Dim::Z(d) => {
@@ -405,7 +405,7 @@ fn split_dim(split_dim: DimCompo, pos: Nat, dim: Dim) -> TyResult<(Dim, Dim)> {
                     ),
                 )
             } else {
-                return Err(TyError::IllegalDimension);
+                return Err(TyError::IllegalDimension(Nat::Lit(0)));
             }
         }
     })

@@ -3,10 +3,10 @@ use std::collections::HashSet;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
+    Fields, FieldsNamed, Ident, ItemStruct, Token, Type, TypeReference,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
-    Fields, FieldsNamed, Ident, ItemStruct, Token, Type, TypeReference,
 };
 
 // Copy paste from syn example
@@ -46,7 +46,7 @@ pub fn span_derive(attr: TokenStream, input: TokenStream) -> TokenStream {
         std::mem::swap(&mut tmp, &mut field.attrs);
         tmp = tmp
             .into_iter()
-            .filter(|attr| !attr.path.is_ident(IGNORE_ATTR_NAME))
+            .filter(|attr| !attr.path().is_ident(IGNORE_ATTR_NAME))
             .collect::<Vec<_>>();
         std::mem::swap(&mut tmp, &mut field.attrs);
     }
@@ -64,7 +64,7 @@ pub fn span_derive(attr: TokenStream, input: TokenStream) -> TokenStream {
     for mut field in original_fields.named.clone().into_iter() {
         let mut ignored = false;
         for attr in field.attrs.iter() {
-            if attr.path.is_ident(IGNORE_ATTR_NAME) {
+            if attr.path().is_ident(IGNORE_ATTR_NAME) {
                 ignored = true;
                 break;
             }
@@ -170,8 +170,13 @@ pub fn generate_desc_tests(input: TokenStream) -> TokenStream {
     // Since include_dir! doesn't support dynamic paths, we need to handle specific folders
     let dir = match folder_path {
         "examples/core" => include_dir::include_dir!("$CARGO_MANIFEST_DIR/../examples/core"),
-        "examples/error-examples" => include_dir::include_dir!("$CARGO_MANIFEST_DIR/../examples/error-examples"),
-        _ => panic!("Unsupported folder path: {}. Currently supported: examples/core, examples/error-examples", folder_path),
+        "examples/error-examples" => {
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/../examples/error-examples")
+        }
+        _ => panic!(
+            "Unsupported folder path: {}. Currently supported: examples/core, examples/error-examples",
+            folder_path
+        ),
     };
 
     let mut test_functions = Vec::new();
@@ -236,7 +241,7 @@ pub fn generate_desc_tests(input: TokenStream) -> TokenStream {
                 } else {
                     test_functions.push(quote! {
                         #[test]
-                        fn #test_name_ident() -> Result<(), descend::error::ErrorReported> {
+                        fn #test_name_ident() -> Result<(), descend::error::CompileError> {
                             let output = descend::compile(#file_path_lit)?.0;
                             insta::assert_snapshot!(output);
                             Ok(())
