@@ -4,10 +4,10 @@ use crate::ast::{
     ParamSig, Provenance, RefDty, ScalarTy, Ty, TyKind,
 };
 
-pub static GPU_DEVICE: &str = "gpu_device";
-pub static GPU_ALLOC: &str = "gpu_alloc_copy";
+pub static NPU_DEVICE: &str = "npu_device";
+pub static NPU_ALLOC: &str = "npu_alloc_copy";
 pub static COPY_TO_HOST: &str = "copy_to_host";
-pub static COPY_TO_GPU: &str = "copy_to_gpu";
+pub static COPY_TO_NPU: &str = "copy_to_npu";
 
 pub static CREATE_ARRAY: &str = "create_array";
 pub static TO_RAW_PTR: &str = "to_raw_ptr";
@@ -44,10 +44,10 @@ pub static MAP: &str = "map";
 pub fn fun_decls() -> Vec<(&'static str, FnTy)> {
     let decls = [
         // Built-in functions
-        (GPU_DEVICE, gpu_device_ty()),
-        (GPU_ALLOC, gpu_alloc_copy_ty()),
+        (NPU_DEVICE, npu_device_ty()),
+        (NPU_ALLOC, npu_alloc_copy_ty()),
         (COPY_TO_HOST, copy_to_host_ty()),
-        (COPY_TO_GPU, copy_to_gpu_ty()),
+        (COPY_TO_NPU, copy_to_npu_ty()),
         (CREATE_ARRAY, create_array_ty()),
         (TO_RAW_PTR, to_raw_ptr_ty()),
         (OFFSET_RAW_PTR, offset_raw_ptr_ty()),
@@ -114,8 +114,8 @@ fn create_array_ty() -> FnTy {
 
 // to_raw_ptr:
 //  <r: prv, m: mem, t: ty> (
-//      &r gpu.thread uniq m t
-// ) -[gpu.thread]-> RawPtr<t>
+//      &r npu.thread uniq m t
+// ) -[npu.thread]-> RawPtr<t>
 fn to_raw_ptr_ty() -> FnTy {
     let r = Ident::new("r");
     let m = Ident::new("m");
@@ -133,7 +133,7 @@ fn to_raw_ptr_ty() -> FnTy {
         ident: d.clone(),
         kind: Kind::DataTy,
     };
-    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::GpuThread));
+    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::NpuThread));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
     FnTy::new(
         vec![r_prv, m_mem, d_dty],
@@ -160,14 +160,14 @@ fn to_raw_ptr_ty() -> FnTy {
 // offset_raw_ptr:
 //  <m: mem, t: ty> (
 //      RawPtr<t>, i32
-// ) -[gpu.thread]-> RawPtr<t>
+// ) -[npu.thread]-> RawPtr<t>
 fn offset_raw_ptr_ty() -> FnTy {
     let d = Ident::new("d");
     let d_dty = IdentKinded {
         ident: d.clone(),
         kind: Kind::DataTy,
     };
-    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::GpuThread));
+    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::NpuThread));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
     FnTy::new(
         vec![d_dty],
@@ -195,9 +195,9 @@ fn offset_raw_ptr_ty() -> FnTy {
 }
 
 // ballot_sync:
-//  <>(bool) -[w: gpu.warp]-> u32
+//  <>(bool) -[w: npu.warp]-> u32
 fn ballot_sync_ty() -> FnTy {
-    let ident_exec = IdentExec::new(Ident::new("w"), ExecTy::new(ExecTyKind::GpuWarp));
+    let ident_exec = IdentExec::new(Ident::new("w"), ExecTy::new(ExecTyKind::NpuWarp));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
     let param_exec = ExecExpr::new(exec_expr.exec.clone().forall(DimCompo::X));
 
@@ -220,9 +220,9 @@ fn ballot_sync_ty() -> FnTy {
 
 // FIXME warp should have the type given in the comment below
 // shfl_sync:
-//  <w: gpu.warp>(u32, u32) -[w.forall]-> u32
+//  <w: npu.warp>(u32, u32) -[w.forall]-> u32
 fn shfl_sync_ty() -> FnTy {
-    let ident_exec = IdentExec::new(Ident::new("w"), ExecTy::new(ExecTyKind::GpuWarp));
+    let ident_exec = IdentExec::new(Ident::new("w"), ExecTy::new(ExecTyKind::NpuWarp));
     let exec_expr_lane = ExecExpr::new(
         ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())).forall(DimCompo::X),
     );
@@ -254,9 +254,9 @@ fn shfl_sync_ty() -> FnTy {
 }
 
 // shfl_up:
-//  <>(u32, i32) -[gpu.warp]-> u32
+//  <>(u32, i32) -[npu.warp]-> u32
 fn shfl_up_ty() -> FnTy {
-    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::GpuWarp));
+    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::NpuWarp));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
 
     FnTy::new(
@@ -307,9 +307,9 @@ fn nat_as_u64_ty() -> FnTy {
     )
 }
 
-// get_warp_id: <>() -[w: gpu.Warp]-> u32
+// get_warp_id: <>() -[w: npu.Warp]-> u32
 fn get_warp_id_ty() -> FnTy {
-    let ident_exec = IdentExec::new(Ident::new("w"), ExecTy::new(ExecTyKind::GpuWarp));
+    let ident_exec = IdentExec::new(Ident::new("w"), ExecTy::new(ExecTyKind::NpuWarp));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
 
     FnTy::new(
@@ -324,9 +324,9 @@ fn get_warp_id_ty() -> FnTy {
     )
 }
 
-// get_lane_id: <>() -[w: gpu.Thread]-> u32
+// get_lane_id: <>() -[w: npu.thread]-> u32
 fn get_lane_id_ty() -> FnTy {
-    let ident_exec = IdentExec::new(Ident::new("t"), ExecTy::new(ExecTyKind::GpuThread));
+    let ident_exec = IdentExec::new(Ident::new("t"), ExecTy::new(ExecTyKind::NpuThread));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
 
     FnTy::new(
@@ -342,9 +342,9 @@ fn get_lane_id_ty() -> FnTy {
 }
 
 // thread_id_x:
-//  <>() -[gpu.thread]-> u32
+//  <>() -[npu.thread]-> u32
 fn thread_id_x_ty() -> FnTy {
-    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::GpuThread));
+    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::NpuThread));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
 
     FnTy::new(
@@ -359,9 +359,9 @@ fn thread_id_x_ty() -> FnTy {
     )
 }
 
-// gpu:
-//   <>(i32) -[cpu.thread]-> Gpu
-fn gpu_device_ty() -> FnTy {
+// npu:
+//   <>(i32) -[cpu.thread]-> Npu
+fn npu_device_ty() -> FnTy {
     let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::CpuThread));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
 
@@ -376,7 +376,7 @@ fn gpu_device_ty() -> FnTy {
         )],
         exec_expr,
         Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Scalar(
-            ScalarTy::Gpu,
+            ScalarTy::Npu,
         ))))),
         vec![],
     )
@@ -480,7 +480,7 @@ fn to_atomic_ty() -> FnTy {
 }
 
 // atomic_store:
-//  <r: prv, m: mem>(&r shrd  m AtomicU32, u32) -[gpu.thread]-> ()
+//  <r: prv, m: mem>(&r shrd  m AtomicU32, u32) -[npu.thread]-> ()
 fn atomic_store_ty() -> FnTy {
     let r = Ident::new("r");
     let m = Ident::new("m");
@@ -492,7 +492,7 @@ fn atomic_store_ty() -> FnTy {
         ident: m.clone(),
         kind: Kind::Memory,
     };
-    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::GpuThread));
+    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::NpuThread));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
 
     FnTy::new(
@@ -526,7 +526,7 @@ fn atomic_store_ty() -> FnTy {
 }
 
 // atomic_fetch_or:
-//  <r: prv, m: mem>(&r shrd m AtomicU32, u32) -[gpu.thread]-> u32
+//  <r: prv, m: mem>(&r shrd m AtomicU32, u32) -[npu.thread]-> u32
 fn atomic_fetch_or_ty() -> FnTy {
     let r = Ident::new("r");
     let m = Ident::new("m");
@@ -538,7 +538,7 @@ fn atomic_fetch_or_ty() -> FnTy {
         ident: m.clone(),
         kind: Kind::Memory,
     };
-    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::GpuThread));
+    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::NpuThread));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
 
     FnTy::new(
@@ -572,7 +572,7 @@ fn atomic_fetch_or_ty() -> FnTy {
 }
 
 // atomic_min:
-//  <r: prv, m: mem>(&r shrd m AtomicI32, i32) -[gpu.thread]-> i32
+//  <r: prv, m: mem>(&r shrd m AtomicI32, i32) -[npu.thread]-> i32
 fn atomic_min_ty() -> FnTy {
     let r = Ident::new("r");
     let m = Ident::new("m");
@@ -584,7 +584,7 @@ fn atomic_min_ty() -> FnTy {
         ident: m.clone(),
         kind: Kind::Memory,
     };
-    let ident_exec = IdentExec::new(Ident::new("t"), ExecTy::new(ExecTyKind::GpuThread));
+    let ident_exec = IdentExec::new(Ident::new("t"), ExecTy::new(ExecTyKind::NpuThread));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
 
     FnTy::new(
@@ -618,7 +618,7 @@ fn atomic_min_ty() -> FnTy {
 }
 
 // atomic_fetch_add:
-//  <r: prv, m: mem>(&r shrd m AtomicU32, u32) -[gpu.thread]-> u32
+//  <r: prv, m: mem>(&r shrd m AtomicU32, u32) -[npu.thread]-> u32
 fn atomic_fetch_add_ty() -> FnTy {
     let r = Ident::new("r");
     let m = Ident::new("m");
@@ -630,7 +630,7 @@ fn atomic_fetch_add_ty() -> FnTy {
         ident: m.clone(),
         kind: Kind::Memory,
     };
-    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::GpuThread));
+    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::NpuThread));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
 
     FnTy::new(
@@ -664,7 +664,7 @@ fn atomic_fetch_add_ty() -> FnTy {
 }
 
 // atomic_load:
-//  <r: prv, m: mem>(&r shrd m AtomicU32) -[gpu.thread]-> u32
+//  <r: prv, m: mem>(&r shrd m AtomicU32) -[npu.thread]-> u32
 fn atomic_load_ty() -> FnTy {
     let r = Ident::new("r");
     let m = Ident::new("m");
@@ -676,7 +676,7 @@ fn atomic_load_ty() -> FnTy {
         ident: m.clone(),
         kind: Kind::Memory,
     };
-    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::GpuThread));
+    let ident_exec = IdentExec::new(Ident::new("ex"), ExecTy::new(ExecTyKind::NpuThread));
     let exec_expr = ExecExpr::new(ExecExprKind::new(BaseExec::Ident(ident_exec.ident.clone())));
 
     FnTy::new(
@@ -701,11 +701,11 @@ fn atomic_load_ty() -> FnTy {
     )
 }
 
-// gpu_alloc:
+// npu_alloc:
 //   <r1: prv, r2: prv, d: dty>(
-//      &r1 uniq cpu.mem Gpu, &r2 shrd cpu.mem t
-//   ) -[cpu.thread]-> t @ gpu.global
-fn gpu_alloc_copy_ty() -> FnTy {
+//      &r1 uniq cpu.mem Npu, &r2 shrd cpu.mem t
+//   ) -[cpu.thread]-> t @ npu.global
+fn npu_alloc_copy_ty() -> FnTy {
     let r1 = Ident::new("r1");
     let r2 = Ident::new("r2");
     let d = Ident::new("d");
@@ -734,7 +734,7 @@ fn gpu_alloc_copy_ty() -> FnTy {
                         Provenance::Ident(r1),
                         Ownership::Uniq,
                         Memory::CpuMem,
-                        DataTy::new(DataTyKind::Scalar(ScalarTy::Gpu)),
+                        DataTy::new(DataTyKind::Scalar(ScalarTy::Npu)),
                     )),
                 ))))),
             ),
@@ -753,14 +753,14 @@ fn gpu_alloc_copy_ty() -> FnTy {
         exec_expr.clone(),
         Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::At(
             Box::new(DataTy::new(DataTyKind::Ident(d))),
-            Memory::GpuGlobal,
+            Memory::NpuGm,
         ))))),
         vec![],
     )
 }
 
 // copy_to_host:
-//   <r1: prv, r2: prv, d: dty>(&r1 shrd gpu.global d, &r2 uniq cpu.mem d)
+//   <r1: prv, r2: prv, d: dty>(&r1 shrd npu.global d, &r2 uniq cpu.mem d)
 //      -[cpu.thread]-> ()
 fn copy_to_host_ty() -> FnTy {
     let r1 = Ident::new("r1");
@@ -790,7 +790,7 @@ fn copy_to_host_ty() -> FnTy {
                     Box::new(RefDty::new(
                         Provenance::Ident(r1),
                         Ownership::Shrd,
-                        Memory::GpuGlobal,
+                        Memory::NpuGm,
                         DataTy::new(DataTyKind::Ident(d.clone())),
                     )),
                 ))))),
@@ -815,10 +815,10 @@ fn copy_to_host_ty() -> FnTy {
     )
 }
 
-// copy_to_gpu:
-//  <r1: prv, r2: prv, d: dty>(& r1 uniq gpu.global d,
+// copy_to_npu:
+//  <r1: prv, r2: prv, d: dty>(& r1 uniq npu.global d,
 //      & r2 shrd cpu.mem d) -[cpu.thread]-> ()
-fn copy_to_gpu_ty() -> FnTy {
+fn copy_to_npu_ty() -> FnTy {
     let r1 = Ident::new("r1");
     let r2 = Ident::new("r2");
     let d = Ident::new("d");
@@ -846,7 +846,7 @@ fn copy_to_gpu_ty() -> FnTy {
                     Box::new(RefDty::new(
                         Provenance::Ident(r1),
                         Ownership::Uniq,
-                        Memory::GpuGlobal,
+                        Memory::NpuGm,
                         DataTy::new(DataTyKind::Ident(d.clone())),
                     )),
                 ))))),
@@ -1186,7 +1186,7 @@ fn select_range_ty() -> FnTy {
 //         vec![Ty::new(TyKind::Data(Box::new(DataTy::new(
 //             DataTyKind::Ident(t.clone()),
 //         ))))],
-//         ExecTy::new(ExecTyKind::GpuThread),
+//         ExecTy::new(ExecTyKind::NpuThread),
 //         Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Ident(t))))),
 //     )
 // }

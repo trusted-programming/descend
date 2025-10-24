@@ -1,12 +1,12 @@
 // Replace 512 with the wanted value
 fn bitonicsort_shrd_mem<n: nat, a: prv>(ha_array: &a uniq cpu.mem [i32; n])-[cpu.thread]->(){
-    let mut gpu =gpu_device(0);
-    let mut a_array = gpu_alloc_copy(&uniq gpu, &shrd *ha_array);
+    let mut npu =npu_device(0);
+    let mut a_array = npu_alloc_copy(&uniq npu, &shrd *ha_array);
 
     exec::<(n/(2*512)),512>(&uniq a_array,
       | grid: BlockGrp<(n/(2*512)), ThreadGrp<512>>,
-        array: &uniq gpu.global [i32; n]
-      |-[gpu.grid]->(){
+        array: &uniq npu.global [i32; n]
+      |-[npu.grid]->(){
         let (even_blocks, odd_blocks) = split_block_grp::<(n/(4*512))>(join_block_grp(
             transpose_block_grp(group_block_grp::<2>(grid))));
         let view_pre = to_view_mut(array);
@@ -16,7 +16,7 @@ fn bitonicsort_shrd_mem<n: nat, a: prv>(ha_array: &a uniq cpu.mem [i32; n])-[cpu
         let joined = join_mut(halved);
         let (asc_elems, desc_elems) = split uniq (n/2) joined;
         decl {
-            let mut shared_memory_array: [i32; 2*512] @ gpu.shared
+            let mut shared_memory_array: [i32; 2*512] @ npu.shared
         } parfor block in even_blocks with block_group from asc_elems{
             let halves = group_mut::<512>(block_group);
             let pairs = transpose_mut(halves);
@@ -82,7 +82,7 @@ fn bitonicsort_shrd_mem<n: nat, a: prv>(ha_array: &a uniq cpu.mem [i32; n])-[cpu
 
         };
         decl {
-            let mut shared_memory_array: [i32; 2*512] @ gpu.shared
+            let mut shared_memory_array: [i32; 2*512] @ npu.shared
         } parfor block in odd_blocks with block_group from desc_elems{
             let halves = group_mut::<512>(block_group);
             let pairs = transpose_mut(halves);
@@ -157,8 +157,8 @@ fn bitonicsort_shrd_mem<n: nat, a: prv>(ha_array: &a uniq cpu.mem [i32; n])-[cpu
 
             exec::<(n/(2*512)),512>(&uniq a_array,
                 | grid: BlockGrp<(n/(2*512)), ThreadGrp<512>>,
-                array: &uniq gpu.global [i32; n]
-                |-[gpu.grid]->() {
+                array: &uniq npu.global [i32; n]
+                |-[npu.grid]->() {
                 let view_a = to_view_mut(array);
                 //[T;n]
                 let j_group = group_mut::< j > (view_a);
@@ -206,8 +206,8 @@ fn bitonicsort_shrd_mem<n: nat, a: prv>(ha_array: &a uniq cpu.mem [i32; n])-[cpu
 
         exec::<(n/(2*512)),512>(&uniq a_array,
           | grid: BlockGrp<(n/(2*512)), ThreadGrp<512>>,
-            array: &uniq gpu.global [i32; n]
-          |-[gpu.grid]->(){
+            array: &uniq npu.global [i32; n]
+          |-[npu.grid]->(){
             let view_a = to_view_mut(array);
             let (even_blocks, odd_blocks) = split_block_grp::<(n/(4*512))>(join_block_grp(
             transpose_block_grp(group_block_grp::<k/(512)>(grid))));
@@ -218,7 +218,7 @@ fn bitonicsort_shrd_mem<n: nat, a: prv>(ha_array: &a uniq cpu.mem [i32; n])-[cpu
             let joined = join_mut(halved);
             let (asc_elems, desc_elems) = split uniq (n/2) joined;
             decl {
-                let mut shared_memory_array: [i32; 2*512] @ gpu.shared
+                let mut shared_memory_array: [i32; 2*512] @ npu.shared
             } parfor block in even_blocks with block_group from asc_elems{
                 let halves = group_mut::<512>(block_group);
                 let pairs = transpose_mut(halves);
@@ -251,7 +251,7 @@ fn bitonicsort_shrd_mem<n: nat, a: prv>(ha_array: &a uniq cpu.mem [i32; n])-[cpu
                 }
             };
             decl {
-                let mut shared_memory_array: [i32; 2*512] @ gpu.shared
+                let mut shared_memory_array: [i32; 2*512] @ npu.shared
             } parfor block in odd_blocks with block_group from desc_elems{
                 let halves = group_mut::<512>(block_group);
                 let pairs = transpose_mut(halves);
@@ -294,8 +294,8 @@ fn bitonicsort_shrd_mem<n: nat, a: prv>(ha_array: &a uniq cpu.mem [i32; n])-[cpu
     for_nat j in halved_range(n/2,512*2){
         exec::<(n/(2*512)),512>(&uniq a_array,
           | grid: BlockGrp<(n/(2*512)), ThreadGrp<512>>,
-            array: &uniq gpu.global [i32; n]
-          |-[gpu.grid]->(){
+            array: &uniq npu.global [i32; n]
+          |-[npu.grid]->(){
             let view_post = to_view_mut(array);
             let j_group = group_mut::< j > (view_post);
             let j_group_t = transpose_mut(j_group);
@@ -315,12 +315,12 @@ fn bitonicsort_shrd_mem<n: nat, a: prv>(ha_array: &a uniq cpu.mem [i32; n])-[cpu
     };
     exec::<(n/(2*512)),512>(&uniq a_array,
     | grid: BlockGrp<(n/(2*512)), ThreadGrp<512>>,
-    array: &uniq gpu.global [i32; n]
-    |-[gpu.grid]->(){
+    array: &uniq npu.global [i32; n]
+    |-[npu.grid]->(){
         let view_a = to_view_mut(array);
         let block_groups = group_mut::<2*512>(view_a);
         decl {
-            let mut shared_memory_array: [i32; 2*512] @ gpu.shared
+            let mut shared_memory_array: [i32; 2*512] @ npu.shared
         } parfor block in grid with block_group from block_groups{
             let halves = group_mut::<512>(block_group);
             let pairs = transpose_mut(halves);

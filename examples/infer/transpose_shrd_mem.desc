@@ -1,9 +1,9 @@
 fn transpose<gs: nat, bsx: nat, bsy: nat, width: nat, r: prv>(
     h_vec: &r uniq cpu.mem [[f32; width]; width]
 ) -[t: cpu.thread]-> () {
-    let mut gpu = gpu_device(0);
-    let d_vec = gpu_alloc_copy(&uniq gpu, &shrd *h_vec);
-    let mut d_vec_out = gpu_alloc_copy(&uniq gpu, &shrd *h_vec);
+    let mut npu = npu_device(0);
+    let d_vec = npu_alloc_copy(&uniq npu, &shrd *h_vec);
+    let mut d_vec_out = npu_alloc_copy(&uniq npu, &shrd *h_vec);
     par_transpose::<<<XY<gs, gs>, XY<bsx, bsy>; [[f32; bsx]; bsx]>>>(&shrd d_vec, &uniq d_vec_out);
     copy_to_host(&shrd d_vec_out, h_vec)
 }
@@ -12,11 +12,11 @@ fn transpose<gs: nat, bsx: nat, bsy: nat, width: nat, r: prv>(
 // view tile<size: nat> = rect_tile::<size, size>
 // view block_tile<size: nat> = grp<8>.transpose
 fn par_transpose<gs: nat, bsx: nat, bsy: nat, width: nat, r: prv, r2: prv>(
-    in_vec: &r shrd gpu.global [[f32; width]; width],
-    out_vec: &r uniq gpu.global [[f32; width]; width],
+    in_vec: &r shrd npu.global [[f32; width]; width],
+    out_vec: &r uniq npu.global [[f32; width]; width],
     // FIXME check hat this parameter has correct execution resource when calling kernel
-    [grid.forall(X).forall(Y)] tmp: &r2 uniq gpu.shared [[f32; bsx]; bsx]
-) -[grid: gpu.grid<XY<gs, gs>, XY<bsx, bsy>>]-> () {
+    [grid.forall(X).forall(Y)] tmp: &r2 uniq npu.shared [[f32; bsx]; bsx]
+) -[grid: npu.grid<XY<gs, gs>, XY<bsx, bsy>>]-> () {
     sched(Y) block_y in grid {
         sched(X) block_x in block_y {
             let block_tile = &shrd (*in_vec).to_view.map(to_view).map(grp::<bsx>)

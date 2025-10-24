@@ -5,14 +5,14 @@ fn vlc_encode<s: prv, c: prv, cl: prv, o: prv, oi: prv, gs:nat>(
     h_out: &o uniq cpu.mem [u32; gs*256],
     h_out_idx: &oi uniq cpu.mem [u32; gs]
 ) -[t: cpu.thread]-> () {
-    let mut gpu = gpu_device(0);
+    let mut npu = npu_device(0);
 
-    let g_source_data = gpu_alloc_copy(&uniq gpu, &shrd *h_source_data);
-    let g_codewords = gpu_alloc_copy(&uniq gpu, &shrd *h_codewords);
-    let g_codewordlens = gpu_alloc_copy(&uniq gpu, &shrd *h_codewordlens);
-    let mut g_out = gpu_alloc_copy(&uniq gpu, &shrd *h_out);
-    let mut g_out_idx = gpu_alloc_copy(&uniq gpu, &shrd *h_out_idx);
-    gpu_vlc_encode::<<<X<gs>, X<256>; [u32; 256], [u32; 256], [u32; 256], [u32; 1]>>>(
+    let g_source_data = npu_alloc_copy(&uniq npu, &shrd *h_source_data);
+    let g_codewords = npu_alloc_copy(&uniq npu, &shrd *h_codewords);
+    let g_codewordlens = npu_alloc_copy(&uniq npu, &shrd *h_codewordlens);
+    let mut g_out = npu_alloc_copy(&uniq npu, &shrd *h_out);
+    let mut g_out_idx = npu_alloc_copy(&uniq npu, &shrd *h_out_idx);
+    npu_vlc_encode::<<<X<gs>, X<256>; [u32; 256], [u32; 256], [u32; 256], [u32; 1]>>>(
         &shrd g_source_data,
         &shrd g_codewords,
         &shrd g_codewordlens,
@@ -24,17 +24,17 @@ fn vlc_encode<s: prv, c: prv, cl: prv, o: prv, oi: prv, gs:nat>(
 }
 
 
-fn gpu_vlc_encode<gs:nat>(
-    g_source_data: &shrd gpu.global [u32; gs*256],
-    g_codewords: &shrd gpu.global [u32; 256],
-    g_codewordlens: &shrd gpu.global [u32; 256],
-    g_out: &uniq gpu.global [u32; gs*256],
-    g_out_idx: &uniq gpu.global [u32; gs],
-    s_codewords: &uniq gpu.shared [u32; 256],
-    s_codewordlens: &uniq gpu.shared [u32; 256],
-    s_scan_and_block_out: &uniq gpu.shared [u32; 256],
-    s_last_index_to_copy: &uniq gpu.shared [u32; 1]
-) -[grid: gpu.grid<X<gs>, X<256>>]-> () {
+fn npu_vlc_encode<gs:nat>(
+    g_source_data: &shrd npu.global [u32; gs*256],
+    g_codewords: &shrd npu.global [u32; 256],
+    g_codewordlens: &shrd npu.global [u32; 256],
+    g_out: &uniq npu.global [u32; gs*256],
+    g_out_idx: &uniq npu.global [u32; gs],
+    s_codewords: &uniq npu.shared [u32; 256],
+    s_codewordlens: &uniq npu.shared [u32; 256],
+    s_scan_and_block_out: &uniq npu.shared [u32; 256],
+    s_last_index_to_copy: &uniq npu.shared [u32; 1]
+) -[grid: npu.grid<X<gs>, X<256>>]-> () {
     let g_source_data_block_groups = group::<256>(to_view(g_source_data));
     let g_codewords_view = to_view(g_codewords);
     let g_codewordlens_view = to_view(g_codewordlens);
@@ -121,7 +121,7 @@ fn gpu_vlc_encode<gs:nat>(
         {
             let mut s_scan_ref = &uniq *s_scan_and_block_out;
             for_nat d in halved_range(128) <'a>{
-                let tmp_up_sweep_view = group_mut::<256/d, 'a, gpu.shared, 256, u32>(
+                let tmp_up_sweep_view = group_mut::<256/d, 'a, npu.shared, 256, u32>(
                     to_view_mut(&uniq *s_scan_ref)
                 );
                 sync;
@@ -158,8 +158,8 @@ fn gpu_vlc_encode<gs:nat>(
         {
             let mut s_scan_ref = &uniq *s_scan_and_block_out;
             for_nat d in doubled_range(1, 128) <'b>{
-                let tmp_down_sweep_view = group_mut::<256 / d, 'b, gpu.shared, 256, u32>(
-                    to_view_mut::<'b, gpu.shared, 256, u32 >(
+                let tmp_down_sweep_view = group_mut::<256 / d, 'b, npu.shared, 256, u32>(
+                    to_view_mut::<'b, npu.shared, 256, u32 >(
                         &'b uniq *s_scan_ref
                 ));
                 sync;
@@ -183,7 +183,7 @@ fn gpu_vlc_encode<gs:nat>(
         // output the bit-index after the last codeword of the block for every block
         // (g_out_idx_block_item)
         // store the last index of the output that is needed to store the output of the
-        // block to reduce the amount of copy operations from gpu.shared to gpu.global
+        // block to reduce the amount of copy operations from npu.shared to npu.global
         // (s_last_index_to_copy_item)
         {
             let s_scan_and_block_out_view = to_view(&shrd *s_scan_and_block_out);
@@ -224,13 +224,13 @@ fn gpu_vlc_encode<gs:nat>(
 
         sync;
 
-        // combine the output of every thread in a block inside gpu.shared
-        // output of a thread can span across 3 32-bit values in gpu.shared!
+        // combine the output of every thread in a block inside npu.shared
+        // output of a thread can span across 3 32-bit values in npu.shared!
         {
             let mut s_block_out = to_atomic_array(&uniq *s_scan_and_block_out);
             sched thread in block {
                 let mut wrbits: u32;
-                // Part 1 (first value in gpu.shared)
+                // Part 1 (first value in npu.shared)
                 if l_thread_out_len > (32u32 - l_thread_start_bit) {
                     wrbits = (32u32 - l_thread_start_bit)
                 } else {
@@ -243,7 +243,7 @@ fn gpu_vlc_encode<gs:nat>(
                 );
                 l_thread_out_len = l_thread_out_len - wrbits;
 
-                // Part 2 (second value in gpu.shared)
+                // Part 2 (second value in npu.shared)
                 if l_thread_out_len > 0u32 {
                     if l_thread_out_len > 32u32 {
                         wrbits = 32u32
@@ -259,7 +259,7 @@ fn gpu_vlc_encode<gs:nat>(
                     l_thread_out_len = l_thread_out_len - wrbits
                 };
 
-                // Part 3 (third value in gpu.shared)
+                // Part 3 (third value in npu.shared)
                 if l_thread_out_len > 0u32 {
                     tmpcw = (l_thread_out & ( ( 1u64 << l_thread_out_len) - 1u64) ) as u32;
                     atomic_fetch_or(
@@ -277,7 +277,7 @@ fn gpu_vlc_encode<gs:nat>(
             sched thread in block {
                 let g_out_item = g_out_block_group[[thread]];
                 let s_block_out_item = s_scan_and_block_out_view[[thread]];
-                // copy block outputs from gpu.shared to gpu.global
+                // copy block outputs from npu.shared to npu.global
                 if thread_id_x() <= s_last_index_to_copy[0] {
                     *g_out_item = *s_block_out_item
                 }

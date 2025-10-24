@@ -1,6 +1,6 @@
-kernel_fun::<....>(....)<<<gpu.grid<X<64>, X<1024>>, [i32; bs]>>> {
+kernel_fun::<....>(....)<<<npu.grid<X<64>, X<1024>>, [i32; bs]>>> {
         // cannot be an @-type because memory would have to be dropped when it goes out of scope
-        let shared tmp: &'kernel uniq gpu.shared [i32; bs];
+        let shared tmp: &'kernel uniq npu.shared [i32; bs];
         parfor warp in warps {
             let scan_codewordlen = codewordlen;
             tmp_shfl_res = shfl_up(scan_codewordlen, 1);
@@ -19,10 +19,10 @@ kernel_fun::<....>(....)<<<gpu.grid<X<64>, X<1024>>, [i32; bs]>>> {
         kernel(tmp)
     }
 
-F: <l: rgn, x: nat, y: nat, n: nat, d:dty>(ARG_DTYS.., &l uniq gpu.shared [d; n]..) -[gpu.grid<DIM_GRID, DIM_BLOCK>]-> ()
+F: <l: rgn, x: nat, y: nat, n: nat, d:dty>(ARG_DTYS.., &l uniq npu.shared [d; n]..) -[npu.grid<DIM_GRID, DIM_BLOCK>]-> ()
 F::<<<DIM_GRID, DIM_BLOCK; [SHARED_MEM_TY**<n>; ['l**<n>]]>>>::<'l, 'g, x, y, n, DTY>(args..);
 <=>
-on GPU: <'l..> { F(&'l uniq gpu.shared SHARED_MEM_TY.., args..) }
+on NPU: <'l..> { F(&'l uniq npu.shared SHARED_MEM_TY.., args..) }
 
 dim3 grid_dim(..);
 dim3 block_dim(..);

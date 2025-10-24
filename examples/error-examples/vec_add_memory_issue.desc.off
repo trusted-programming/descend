@@ -1,4 +1,4 @@
-// Vector addition kernel demonstrating Descend's safe GPU programming model
+// Vector addition kernel demonstrating Descend's safe NPU programming model
 // This function showcases extended borrow checking, memory safety, and execution context tracking
 
 // Generic function with type parameters:
@@ -6,27 +6,27 @@
 // - r: prv - Provenance parameter tracking memory region/lifetime for all references
 fn add<n: nat, r: prv>(
     // Shared reference to first input vector - multiple threads can read simultaneously
-    // Memory space: gpu.global (GPU global memory)
+    // Memory space: npu.global (NPU global memory)
     // Ownership: shrd (shared) - prevents write-after-read data races
     // Type: 16-element array of 16-bit signed integers
-    a: &r shrd gpu.global [i16; 16],
+    a: &r shrd npu.global [i16; 16],
     
     // Shared reference to second input vector - multiple threads can read simultaneously  
     // Same memory space and ownership constraints as 'a'
-    b: &r shrd gpu.global [i16; 16],
+    b: &r shrd npu.global [i16; 16],
     
     // ERROR: This parameter should be declared as 'unq' (unique) instead of 'shrd' (shared)
     // because it's used for assignment (c = a + b). Shared references are read-only and
     // prevent data races by allowing multiple concurrent readers. Unique references are
     // required for write operations to ensure exclusive access and prevent race conditions.
     // The Descend compiler will detect this ownership violation and fail compilation.
-    c: &r shrd gpu.global [i16; 16]
+    c: &r shrd npu.global [i16; 16]
     
-// Execution context specification - defines how this function runs on GPU hardware
-// - grid: gpu.grid<X<1>, X<16>> - GPU execution grid with 1 block containing 16 threads
-// - The type system ensures GPU memory is only accessed in GPU execution contexts
-// - Prevents invalid cross-device memory accesses (CPU accessing GPU memory)
-) -[grid: gpu.grid<X<1>, X<16>>]-> () {
+// Execution context specification - defines how this function runs on NPU hardware
+// - grid: npu.grid<X<1>, X<16>> - NPU execution grid with 1 block containing 16 threads
+// - The type system ensures NPU memory is only accessed in NPU execution contexts
+// - Prevents invalid cross-device memory accesses (CPU accessing NPU memory)
+) -[grid: npu.grid<X<1>, X<16>>]-> () {
     
     // Vector addition operation - element-wise addition of arrays
     // The compiler generates safe parallel code that:

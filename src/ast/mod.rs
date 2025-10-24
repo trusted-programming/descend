@@ -883,7 +883,7 @@ impl ExecExpr {
                 }
             }
             (BaseExec::CpuThread, BaseExec::CpuThread) => (),
-            (BaseExec::GpuGrid(gdim, bdim), BaseExec::GpuGrid(gdimo, bdimo)) => {
+            (BaseExec::NpuGrid(gdim, bdim), BaseExec::NpuGrid(gdimo, bdimo)) => {
                 if !(gdim.equal(nat_ctx, gdimo)? && bdim.equal(nat_ctx, bdimo)?) {
                     return Ok(false);
                 }
@@ -1010,7 +1010,7 @@ impl ExecExprKind {
 pub enum BaseExec {
     Ident(Ident),
     CpuThread,
-    GpuGrid(Dim, Dim),
+    NpuGrid(Dim, Dim),
 }
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
@@ -1045,14 +1045,14 @@ impl ExecTy {
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub enum ExecTyKind {
     CpuThread,
-    GpuThread,
-    GpuWarp,
-    GpuBlock(Dim),
-    GpuGrid(Dim, Dim),
-    GpuToThreads(Dim, Box<ExecTy>),
-    GpuThreadGrp(Dim),
-    GpuWarpGrp(Nat),
-    GpuBlockGrp(Dim, Dim),
+    NpuThread,
+    NpuWarp,
+    NpuBlock(Dim),
+    NpuGrid(Dim, Dim),
+    NpuToThreads(Dim, Box<ExecTy>),
+    NpuThreadGrp(Dim),
+    NpuWarpGrp(Nat),
+    NpuBlockGrp(Dim, Dim),
     Any,
 }
 
@@ -1459,7 +1459,7 @@ pub enum ScalarTy {
     F32,
     F64,
     Bool,
-    Gpu,
+    Npu,
 }
 
 #[derive(PartialEq, Eq, Hash, Debug, Copy, Clone)]
@@ -1477,9 +1477,8 @@ pub enum Provenance {
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub enum Memory {
     CpuMem,
-    GpuGlobal,
-    GpuShared,
-    GpuLocal,
+    NpuGm,
+    NpuUb,
     Ident(Ident),
 }
 

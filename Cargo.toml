@@ -1,7 +1,10 @@
 [package]
 name = "descend"
 version = "0.1.0"
-authors = ["Köpcke <bastian.koepcke@uni-muenster.de>"]
+authors = [
+    "Luca Carlig <luca.carlig@huawei.com>",
+    "Köpcke <bastian.koepcke@uni-muenster.de>",
+]
 edition = "2021"
 
 # Allow specific lints globally

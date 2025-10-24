@@ -217,14 +217,14 @@ fn ty_check_ident(
 fn default_mem_by_exec(exec_ty: &ExecTyKind) -> Option<Memory> {
     match exec_ty {
         ExecTyKind::CpuThread => Some(Memory::CpuMem),
-        ExecTyKind::GpuThread => Some(Memory::GpuLocal),
-        ExecTyKind::GpuGrid(_, _) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuToThreads(_, _) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuBlockGrp(_, _) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuThreadGrp(_) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuBlock(_) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuWarpGrp(_) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuWarp => Some(Memory::GpuLocal),
+        ExecTyKind::NpuThread => Some(Memory::NpuUb),
+        ExecTyKind::NpuGrid(_, _) => Some(Memory::NpuUb),
+        ExecTyKind::NpuToThreads(_, _) => Some(Memory::NpuUb),
+        ExecTyKind::NpuBlockGrp(_, _) => Some(Memory::NpuUb),
+        ExecTyKind::NpuThreadGrp(_) => Some(Memory::NpuUb),
+        ExecTyKind::NpuBlock(_) => Some(Memory::NpuUb),
+        ExecTyKind::NpuWarpGrp(_) => Some(Memory::NpuUb),
+        ExecTyKind::NpuWarp => Some(Memory::NpuUb),
         ExecTyKind::Any => None,
     }
 }

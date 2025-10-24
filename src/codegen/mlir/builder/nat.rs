@@ -40,7 +40,7 @@ where
         | Nat::WarpIdx
         | Nat::LaneIdx
         | Nat::GridIdx => {
-            unimplemented!("GPU-specific natural numbers not yet supported in MLIR backend")
+            unimplemented!("NPU-specific natural numbers not yet supported in MLIR backend")
         }
         Nat::App(_, _) => {
             unimplemented!("Natural number function application not yet supported in MLIR backend")

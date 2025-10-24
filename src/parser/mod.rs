@@ -216,10 +216,10 @@ fn replace_exec_idents_with_specific_execs(fun_def: &mut FunDef) {
                         ));
                         fun_def.generic_exec = None;
                     }
-                    ExecTyKind::GpuGrid(gdim, bdim) => {
+                    ExecTyKind::NpuGrid(gdim, bdim) => {
                         self.ident_names_to_exec_expr.push((
                             ident_exec.ident.name.clone(),
-                            ExecExpr::new(ExecExprKind::new(BaseExec::GpuGrid(
+                            ExecExpr::new(ExecExprKind::new(BaseExec::NpuGrid(
                                 gdim.clone(),
                                 bdim.clone(),
                             ))),
@@ -235,7 +235,7 @@ fn replace_exec_idents_with_specific_execs(fun_def: &mut FunDef) {
 
     fn expand_exec_expr(exec_mapping: &[(Box<str>, ExecExpr)], exec_expr: &mut ExecExpr) {
         match &exec_expr.exec.base {
-            BaseExec::CpuThread | BaseExec::GpuGrid(_, _) => {}
+            BaseExec::CpuThread | BaseExec::NpuGrid(_, _) => {}
             BaseExec::Ident(ident) => {
                 if let Some(exec) = get_exec_expr(exec_mapping, ident) {
                     let new_base = exec.exec.base.clone();
@@ -824,7 +824,7 @@ peg::parser! {
             / "u64" { DataTyKind::Scalar(ScalarTy::U64) }
             / "bool" { DataTyKind::Scalar(ScalarTy::Bool) }
             / "()" { DataTyKind::Scalar(ScalarTy::Unit) }
-            / "Gpu" { DataTyKind::Scalar(ScalarTy::Gpu) }
+            / "Npu" { DataTyKind::Scalar(ScalarTy::Npu) }
             / "AtomicU32" { DataTyKind::Atomic(AtomicTy::AtomicU32) }
             / name:ident() { DataTyKind::Ident(name) }
             / "(" _ types:dty() ** ( _ "," _ ) _ ")" { DataTyKind::Tuple(types) }
@@ -856,7 +856,7 @@ peg::parser! {
         rule base_exec() -> BaseExec =
             ident:ident() { BaseExec::Ident(ident) }
             / "cpu.thread" { BaseExec::CpuThread }
-            / "gpu.grid" _ "<" _ gdim:dim() _ "," _ bdim:dim() _ ">" { BaseExec::GpuGrid(gdim, bdim) }
+            / "npu.grid" _ "<" _ gdim:dim() _ "," _ bdim:dim() _ ">" { BaseExec::NpuGrid(gdim, bdim) }
 
         rule exec_path_elem() -> ExecPathElem =
             "forall" _ "(" _ dim_compo:dim_component() _ ")" { ExecPathElem::ForAll(dim_compo) }
@@ -874,29 +874,29 @@ peg::parser! {
             "cpu.thread" {
                 ExecTyKind::CpuThread
             }
-            / "gpu.grid" _ "<" _ g_dim:dim() _ "," _ b_dim:dim() _ ">" {
-                ExecTyKind::GpuGrid(g_dim, b_dim)
+            / "npu.grid" _ "<" _ g_dim:dim() _ "," _ b_dim:dim() _ ">" {
+                ExecTyKind::NpuGrid(g_dim, b_dim)
             }
-            / "gpu.block" _ "<" _ b_dim:dim() _ ">" {
-                ExecTyKind::GpuBlock(b_dim)
+            / "npu.block" _ "<" _ b_dim:dim() _ ">" {
+                ExecTyKind::NpuBlock(b_dim)
             }
-            / "gpu.global_threads" _ "<" _ dim:dim() _ "," _ exec_ty:exec_ty() _ ">" {
-                ExecTyKind::GpuToThreads(dim, Box::new(exec_ty))
+            / "npu.global_threads" _ "<" _ dim:dim() _ "," _ exec_ty:exec_ty() _ ">" {
+                ExecTyKind::NpuToThreads(dim, Box::new(exec_ty))
             }
-            / "gpu.block_grp" _ "<" _ g_dim:dim() _ "," _ b_dim:dim() _ ">" {
-                ExecTyKind::GpuBlockGrp(g_dim, b_dim)
+            / "npu.block_grp" _ "<" _ g_dim:dim() _ "," _ b_dim:dim() _ ">" {
+                ExecTyKind::NpuBlockGrp(g_dim, b_dim)
             }
-            / "gpu.warp_grp" _ "<" _ wg_size:nat() _ ">" {
-                ExecTyKind::GpuWarpGrp(wg_size)
+            / "npu.warp_grp" _ "<" _ wg_size:nat() _ ">" {
+                ExecTyKind::NpuWarpGrp(wg_size)
             }
-            / "gpu.warp" {
-                ExecTyKind::GpuWarp
+            / "npu.warp" {
+                ExecTyKind::NpuWarp
             }
-            / "gpu.thread_grp" _ "<" _ t_dim:dim() _ ">" {
-                ExecTyKind::GpuThreadGrp(t_dim)
+            / "npu.thread_grp" _ "<" _ t_dim:dim() _ ">" {
+                ExecTyKind::NpuThreadGrp(t_dim)
             }
-            / "gpu.thread" {
-                ExecTyKind::GpuThread
+            / "npu.thread" {
+                ExecTyKind::NpuThread
             }
             / "any" {
                 ExecTyKind::Any
@@ -912,8 +912,7 @@ peg::parser! {
 
         pub(crate) rule memory_kind() -> Memory
             = "cpu.mem" { Memory::CpuMem }
-            / "gpu.global" { Memory::GpuGlobal }
-            / "gpu.shared" { Memory::GpuShared }
+            / "npu.global" { Memory::NpuGm }
             / name:ident() { Memory::Ident(name) }
 
         pub(crate) rule kind() -> Kind
@@ -968,10 +967,10 @@ peg::parser! {
         // Therefore, the rule fails, even though it should have succeeded.
         rule keyword() -> ()
             = (("crate" / "super" / "self" / "Self" / "const" / "mut" / "uniq" / "shrd" / "indep" / "in" / "to_thread_grp" / "to_warps" / "to" / "with"
-                / "f32" / "f64" / "i32" / "u8" / "u32" / "u64" / "bool" / "AtomicU32" / "Gpu" / "nat" / "mem" / "ty" / "prv" / "own"
+                / "f32" / "f64" / "i32" / "u8" / "u32" / "u64" / "bool" / "AtomicU32" / "Npu" / "nat" / "mem" / "ty" / "prv" / "own"
                 / "let"("prov")? / "if" / "else" / "sched" / "for" / "while" / "fn" / "with" / "split_exec" / "split"
-                / "cpu.mem" / "gpu.global" / "gpu.shared" / "sync" / "struct"/ "unsafe"
-                / "cpu.thread" / "gpu.grid" / "gpu.block" / "gpu.global_threads" / "gpu.block_grp" / "gpu.thread_grp" / "gpu.thread" / "any"
+                / "cpu.mem" / "npu.global" / "npu.shared" / "sync" / "struct"/ "unsafe"
+                / "cpu.thread" / "npu.grid" / "npu.block" / "npu.global_threads" / "npu.block_grp" / "npu.thread_grp" / "npu.thread" / "any"
                 / view_name())
                 !['a'..='z'|'A'..='Z'|'0'..='9'|'_']
             )
@@ -1224,13 +1223,13 @@ mod tests {
     }
 
     #[test]
-    fn ty_gpu() {
+    fn ty_npu() {
         assert_eq!(
-            descend::ty("Gpu"),
+            descend::ty("Npu"),
             Ok(Ty::new(TyKind::Data(Box::new(DataTy::new(
-                DataTyKind::Scalar(ScalarTy::Gpu)
+                DataTyKind::Scalar(ScalarTy::Npu)
             ))))),
-            "does not recognize GPU type"
+            "does not recognize NPU type"
         );
     }
 
@@ -1362,17 +1361,17 @@ mod tests {
             ))))),
             "does not recognize type of unique i32 reference in cpu heap with provenance 'a"
         );
-        assert_eq!(descend::ty("&b shrd gpu.global [f32;N]"), Ok(Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Ref(
+        assert_eq!(descend::ty("&b shrd npu.global [f32;N]"), Ok(Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Ref(
             Box::new(RefDty::new(
                         Provenance::Ident(Ident::new("b")),
                         Ownership::Shrd,
-                        Memory::GpuGlobal,
+                        Memory::NpuGm,
                         DataTy::new(DataTyKind::Array(
                             Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::F32))),
                             Nat::Ident(Ident::new("N"))
                         ))
                     )))))),
-        )), "does not recognize type of shared [f32] reference in gpu global memory with provenance b");
+        )), "does not recognize type of shared [f32] reference in npu global memory with provenance b");
     }
 
     #[test]
@@ -1388,17 +1387,17 @@ mod tests {
             "does not recognize f32 @ cpu.stack type"
         );
         assert_eq!(
-            descend::ty("[f32;42] @ gpu.global"),
+            descend::ty("[f32;42] @ npu.global"),
             Ok(Ty::new(TyKind::Data(Box::new(DataTy::new(
                 DataTyKind::At(
                     Box::new(DataTy::new(DataTyKind::Array(
                         Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::F32))),
                         Nat::Lit(42)
                     ))),
-                    Memory::GpuGlobal
+                    Memory::NpuGm
                 )
             ))))),
-            "does not recognize [f32;42] @ gpu.global type"
+            "does not recognize [f32;42] @ npu.global type"
         );
     }
 
@@ -1443,14 +1442,9 @@ mod tests {
             "does not recognize cpu.heap memory kind"
         );
         assert_eq!(
-            descend::memory_kind("gpu.global"),
-            Ok(Memory::GpuGlobal),
-            "does not recognize gpu.global memory kind"
-        );
-        assert_eq!(
-            descend::memory_kind("gpu.shared"),
-            Ok(Memory::GpuShared),
-            "does not recognize gpu.shared memory kind"
+            descend::memory_kind("npu.global"),
+            Ok(Memory::NpuGm),
+            "does not recognize npu.global memory kind"
         );
         assert_eq!(
             descend::memory_kind("M"),
@@ -1467,14 +1461,14 @@ mod tests {
     //         "does not recognize cpu.stack memory kind"
     //     );
     //     assert_eq!(
-    //         descend::execution_resource("gpu.block"),
-    //         Ok(Exec::GpuBlock(1)),
-    //         "does not recognize gpu.block memory kind"
+    //         descend::execution_resource("npu.block"),
+    //         Ok(Exec::NpuBlock(1)),
+    //         "does not recognize npu.block memory kind"
     //     );
     //     assert_eq!(
-    //         descend::execution_resource("gpu.thread"),
-    //         Ok(Exec::GpuThread),
-    //         "does not recognize gpu.global memory kind"
+    //         descend::execution_resource("npu.thread"),
+    //         Ok(Exec::NpuThread),
+    //         "does not recognize npu.global memory kind"
     //     );
     // }
 
@@ -2061,7 +2055,7 @@ mod tests {
         // Does there always have to be another instruction after let ?
         let result = descend::expression_seq("let mut x : 32 = 17.123f32;");
         assert!(result.is_err());
-        let result = descend::expression_seq("let mut x:bool@gpu.shared@ = false;");
+        let result = descend::expression_seq("let mut x:bool@npu.shared@ = false;");
         assert!(result.is_err());
         let result = descend::expression_seq("let x:bool@Memory.Location = false;");
         assert!(result.is_err());

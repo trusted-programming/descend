@@ -40,7 +40,7 @@ impl ToMlir for ScalarTy {
             ScalarTy::F32 => Type::float32(context),
             ScalarTy::F64 => Type::float64(context),
             ScalarTy::Bool => IntegerType::new(context, 1).into(),
-            ScalarTy::Gpu => IntegerType::new(context, 32).into(), // this will be ignored in the MLIR backend
+            ScalarTy::Npu => IntegerType::new(context, 32).into(), // this will be ignored in the MLIR backend
         }
     }
 }
@@ -81,7 +81,7 @@ impl ToMlir for crate::ast::Ident {
 fn apply_hivm_address_space(base_str: String, mem: &Memory) -> String {
     if base_str.starts_with("memref<") {
         match mem {
-            Memory::GpuGlobal | Memory::GpuShared => {
+            Memory::NpuGm => {
                 // Use replace_range for better performance than replacen
                 let mut result = base_str;
                 if let Some(pos) = result.rfind('>') {
@@ -89,7 +89,7 @@ fn apply_hivm_address_space(base_str: String, mem: &Memory) -> String {
                 }
                 result
             }
-            Memory::GpuLocal => {
+            Memory::NpuUb => {
                 let mut result = base_str;
                 if let Some(pos) = result.rfind('>') {
                     result.insert_str(pos, ", #hivm.address_space<ub>");
@@ -193,7 +193,7 @@ fn get_mlir_type_string_with_address_space(ty: &Ty, context: &Context) -> String
     let base_type = ty.to_mlir(context);
     let base_str = base_type.to_string();
 
-    // Check if this is a DataTy with At type or Ref type with GPU memory
+    // Check if this is a DataTy with At type or Ref type with NPU memory
     match &ty.ty {
         TyKind::Data(data_ty) => match &data_ty.dty {
             DataTyKind::At(_, mem) => apply_hivm_address_space(base_str, mem),
@@ -234,7 +234,7 @@ impl ToMlir for DataTy {
                 unimplemented!("Struct types not yet supported in MLIR conversion")
             }
             DataTyKind::At(inner, mem) => {
-                // Lower inner type and, if it is a memref, attach HIVM address space for gpu.global
+                // Lower inner type and, if it is a memref, attach HIVM address space for npu.global
                 let base_type = inner.to_mlir(context);
                 let base_str = base_type.to_string();
                 let final_str = apply_hivm_address_space(base_str, mem);
@@ -333,10 +333,10 @@ impl ToMlir for FunDef {
 
         // Create attributes based on execution type
         let attributes: Vec<(Identifier, Attribute)> =
-            if matches!(self.exec.exec.base, BaseExec::GpuGrid(_, _)) {
-                // For GPU functions, we need to create HACC attributes
+            if matches!(self.exec.exec.base, BaseExec::NpuGrid(_, _)) {
+                // For NPU functions, we need to create HACC attributes
                 // Since we can't easily create HACC dialect attributes here, we'll use empty attributes
-                // The actual GPU attributes will be handled in the string-based generation path
+                // The actual NPU attributes will be handled in the string-based generation path
                 vec![]
             } else {
                 // For CPU functions, no special attributes needed
@@ -354,7 +354,7 @@ impl ToMlir for FunDef {
     }
 }
 
-/// Generate function with body including load operations for GPU parameters
+/// Generate function with body including load operations for NPU parameters
 fn generate_function_with_body(fun: &crate::ast::FunDef, context: &Context) -> String {
     // Pre-allocate with estimated capacity to avoid reallocations
     let estimated_capacity = 50 + fun.ident.name.len() + fun.param_decls.len() * 20;
@@ -384,8 +384,8 @@ fn generate_function_with_body(fun: &crate::ast::FunDef, context: &Context) -> S
 
     signature.push_str(")");
 
-    // Add GPU attributes if needed
-    if matches!(fun.exec.exec.base, BaseExec::GpuGrid(_, _)) {
+    // Add NPU attributes if needed
+    if matches!(fun.exec.exec.base, BaseExec::NpuGrid(_, _)) {
         // TODO: When HACC dialect is registered in the MLIR context, replace this with:
         // let hacc_attributes = create_hacc_attributes(context);
         // and use the attributes with MLIR operation builders instead of string generation
@@ -608,7 +608,7 @@ mod tests {
         let ref_dty = RefDty::new(
             Provenance::Ident(Ident::new("r")),
             Ownership::Shrd,
-            Memory::GpuGlobal,
+            Memory::NpuGm,
             make_data_ty(DataTyKind::Scalar(ScalarTy::F32)),
         );
         let data_ty = make_data_ty(DataTyKind::Ref(Box::new(ref_dty)));
@@ -646,13 +646,13 @@ mod tests {
     }
 
     #[test]
-    fn test_at_array_gpu_global_adds_gm_address_space() {
+    fn test_at_array_npu_global_adds_gm_address_space() {
         let context = Context::new();
         let inner = make_data_ty(DataTyKind::Array(
             Box::new(make_data_ty(DataTyKind::Scalar(ScalarTy::I32))),
             Nat::Lit(16),
         ));
-        let data_ty = make_data_ty(DataTyKind::At(Box::new(inner), Memory::GpuGlobal));
+        let data_ty = make_data_ty(DataTyKind::At(Box::new(inner), Memory::NpuGm));
 
         // Test the type string generation (avoids HIVM dialect registration issues)
         let type_str = test_at_type_string(&data_ty, &context);
@@ -673,15 +673,15 @@ mod tests {
         assert_eq!(type_str, "memref<16xi32>");
     }
 
-    /// Helper function to create a minimal GPU function with GpuGrid execution context
-    fn make_gpu_function() -> FunDef {
+    /// Helper function to create a minimal NPU function with NpuGrid execution context
+    fn make_npu_function() -> FunDef {
         use crate::ast::{
             Block, DataTy, DataTyKind, Dim, Dim1d, ExecExpr, ExecExprKind, Ident, ScalarTy, Span,
         };
 
         FunDef {
             ident: Ident {
-                name: "gpu_kernel".into(),
+                name: "npu_kernel".into(),
                 span: Some(Span { begin: 0, end: 10 }),
                 is_implicit: false,
             },
@@ -691,7 +691,7 @@ mod tests {
             ret_dty: Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::Unit))),
             exec: ExecExpr {
                 exec: Box::new(ExecExprKind {
-                    base: BaseExec::GpuGrid(
+                    base: BaseExec::NpuGrid(
                         Dim::X(Box::new(Dim1d(Nat::Lit(1)))),
                         Dim::X(Box::new(Dim1d(Nat::Lit(16)))),
                     ),
@@ -755,15 +755,15 @@ mod tests {
     }
 
     #[test]
-    fn test_gpu_function_signature_with_attributes() {
+    fn test_npu_function_signature_with_attributes() {
         let context = Context::new();
-        let gpu_fun = make_gpu_function();
-        let signature = generate_function_with_body(&gpu_fun, &context);
+        let npu_fun = make_npu_function();
+        let signature = generate_function_with_body(&npu_fun, &context);
 
-        // Check that the signature contains the GPU attributes
+        // Check that the signature contains the NPU attributes
         assert!(signature
             .contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
-        assert!(signature.contains("func.func @gpu_kernel"));
+        assert!(signature.contains("func.func @npu_kernel"));
         assert!(signature.contains(") attributes"));
     }
 
@@ -773,7 +773,7 @@ mod tests {
         let cpu_fun = make_cpu_function();
         let signature = generate_function_with_body(&cpu_fun, &context);
 
-        // Check that the signature does NOT contain GPU attributes
+        // Check that the signature does NOT contain NPU attributes
         assert!(!signature
             .contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
         assert!(signature.contains("func.func @cpu_function"));
@@ -784,8 +784,8 @@ mod tests {
     #[test]
     fn test_function_signature_format() {
         let context = Context::new();
-        let gpu_fun = make_gpu_function();
-        let signature = generate_function_with_body(&gpu_fun, &context);
+        let npu_fun = make_npu_function();
+        let signature = generate_function_with_body(&npu_fun, &context);
 
         // Check that attributes appear in the correct position (after params, before brace)
         let lines: Vec<&str> = signature.lines().collect();
@@ -794,7 +794,7 @@ mod tests {
         assert_eq!(lines.len(), 3);
 
         let func_line = lines[0]; // First line should be the function declaration
-        assert!(func_line.contains("func.func @gpu_kernel"));
+        assert!(func_line.contains("func.func @npu_kernel"));
         assert!(func_line.contains(
             ") attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>} {"
         ));
@@ -802,7 +802,7 @@ mod tests {
         // Verify the structure: function_name() attributes { ... } {
         let parts: Vec<&str> = func_line.split(") attributes").collect();
         assert_eq!(parts.len(), 2);
-        assert!(parts[0].contains("@gpu_kernel"));
+        assert!(parts[0].contains("@npu_kernel"));
         assert!(parts[1].starts_with(" {hacc.entry"));
     }
 }

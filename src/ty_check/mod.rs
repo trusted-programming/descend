@@ -278,14 +278,14 @@ fn syncable_under_exec(synced: &ExecExpr, under: &ExecExpr) -> TyResult<()> {
 
 fn syncable_exec_ty(exec_ty: &ExecTy) -> bool {
     match &exec_ty.ty {
-        ExecTyKind::GpuBlock(_) | ExecTyKind::GpuWarp => true,
+        ExecTyKind::NpuBlock(_) | ExecTyKind::NpuWarp => true,
         ExecTyKind::CpuThread
-        | ExecTyKind::GpuGrid(_, _)
-        | ExecTyKind::GpuToThreads(_, _)
-        | ExecTyKind::GpuBlockGrp(_, _)
-        | ExecTyKind::GpuThreadGrp(_)
-        | ExecTyKind::GpuWarpGrp(_)
-        | ExecTyKind::GpuThread
+        | ExecTyKind::NpuGrid(_, _)
+        | ExecTyKind::NpuToThreads(_, _)
+        | ExecTyKind::NpuBlockGrp(_, _)
+        | ExecTyKind::NpuThreadGrp(_)
+        | ExecTyKind::NpuWarpGrp(_)
+        | ExecTyKind::NpuThread
         | ExecTyKind::Any => false,
     }
 }
@@ -1204,7 +1204,7 @@ fn ty_check_app_kernel(ctx: &mut ExprTyCtx, app_kernel: &mut AppKernel) -> TyRes
     for arg in app_kernel.args.iter_mut() {
         ty_check_expr(ctx, arg)?;
     }
-    let mut kernel_exec = ExecExpr::new(ExecExprKind::new(BaseExec::GpuGrid(
+    let mut kernel_exec = ExecExpr::new(ExecExprKind::new(BaseExec::NpuGrid(
         app_kernel.grid_dim.clone(),
         app_kernel.block_dim.clone(),
     )));
@@ -1239,7 +1239,7 @@ fn ty_check_app_kernel(ctx: &mut ExprTyCtx, app_kernel: &mut AppKernel) -> TyRes
                 Ident::new_impli(&utils::fresh_name("shared_mem")),
                 Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::At(
                     Box::new(dty.clone()),
-                    Memory::GpuShared,
+                    Memory::NpuUb,
                 ))))),
                 Mutability::Mut,
                 kernel_ctx.exec.clone(),
@@ -1337,7 +1337,7 @@ fn ty_check_app_kernel(ctx: &mut ExprTyCtx, app_kernel: &mut AppKernel) -> TyRes
 
 fn exec_distrib_over_blocks(exec_expr: &ExecExpr) -> ExecExpr {
     let base_clone = ExecExprKind::new(exec_expr.exec.base.clone());
-    let distrib_over_blocks = if let BaseExec::GpuGrid(gdim, _) = &exec_expr.exec.base {
+    let distrib_over_blocks = if let BaseExec::NpuGrid(gdim, _) = &exec_expr.exec.base {
         match gdim {
             Dim::XYZ(_) => base_clone
                 .forall(DimCompo::X)
@@ -1351,7 +1351,7 @@ fn exec_distrib_over_blocks(exec_expr: &ExecExpr) -> ExecExpr {
             Dim::Z(_) => base_clone.forall(DimCompo::Z).forall(DimCompo::Z),
         }
     } else {
-        panic!("Expected GPU grid.")
+        panic!("Expected NPU grid.")
     };
     ExecExpr::new(distrib_over_blocks)
 }
@@ -1638,11 +1638,7 @@ fn ty_check_borrow(
         },
         TyKind::FnTy(_) => return Err(TyError::String("Trying to borrow a function.".to_string())),
     };
-    if rmem == Memory::GpuLocal {
-        return Err(TyError::String(
-            "Trying to take reference of unaddressable gpu.local memory.".to_string(),
-        ));
-    }
+
     let res_dty = DataTy::new(DataTyKind::Ref(Box::new(RefDty::new(
         Provenance::Value(prv_val_name.clone()),
         own,
@@ -1656,16 +1652,16 @@ fn ty_check_borrow(
 fn allowed_mem_for_exec(exec_ty: &ExecTyKind) -> Vec<Memory> {
     match exec_ty {
         ExecTyKind::CpuThread => vec![Memory::CpuMem],
-        ExecTyKind::GpuThread
-        | ExecTyKind::GpuGrid(_, _)
-        | ExecTyKind::GpuBlock(_)
-        | ExecTyKind::GpuBlockGrp(_, _)
-        | ExecTyKind::GpuWarpGrp(_)
-        | ExecTyKind::GpuWarp
-        | ExecTyKind::GpuThreadGrp(_) => {
-            vec![Memory::GpuGlobal, Memory::GpuShared, Memory::GpuLocal]
+        ExecTyKind::NpuThread
+        | ExecTyKind::NpuGrid(_, _)
+        | ExecTyKind::NpuBlock(_)
+        | ExecTyKind::NpuBlockGrp(_, _)
+        | ExecTyKind::NpuWarpGrp(_)
+        | ExecTyKind::NpuWarp
+        | ExecTyKind::NpuThreadGrp(_) => {
+            vec![Memory::NpuGm, Memory::NpuUb]
         }
-        ExecTyKind::GpuToThreads(_, _) => vec![Memory::GpuGlobal, Memory::GpuLocal],
+        ExecTyKind::NpuToThreads(_, _) => vec![Memory::NpuGm, Memory::NpuUb],
         ExecTyKind::Any => vec![],
     }
 }
@@ -1837,7 +1833,7 @@ pub fn callable_in(callee_exec_ty: &ExecTy, caller_exec_ty: &ExecTy) -> bool {
 
 fn expand_exec_expr(ctx: &ExprTyCtx, exec_expr: &ExecExpr) -> TyResult<ExecExpr> {
     match &exec_expr.exec.base {
-        BaseExec::CpuThread | BaseExec::GpuGrid(_, _) => Ok(exec_expr.clone()),
+        BaseExec::CpuThread | BaseExec::NpuGrid(_, _) => Ok(exec_expr.clone()),
         BaseExec::Ident(ident) => {
             let inner_exec_expr = ctx.ty_ctx.get_exec_expr_for_exec_ident(ident)?;
             let new_base = inner_exec_expr.exec.base.clone();
@@ -1862,11 +1858,11 @@ fn legal_exec_under_current(ctx: &ExprTyCtx, exec: &ExecExpr) -> TyResult<()> {
         let current_exec_ty = &ctx.exec.ty.as_ref().unwrap().ty;
         let expanded_exec_ty = expanded_exec_expr.ty.unwrap().ty;
         match (current_exec_ty, expanded_exec_ty) {
-            // FIXME Piet: this does not guarantee that the GpuWarpGrp was created from the GpuBlock
+            // FIXME Piet: this does not guarantee that the NpuWarpGrp was created from the NpuBlock
             //  TODO Basti: syntactically compare the exec expressions instead of types
             //   ctx.exec.to_warps == expanded_exec?
             //   ctx.exec.to_threads == expanded_exec?
-            (ExecTyKind::GpuBlock(..), ExecTyKind::GpuWarpGrp(..)) => (),
+            (ExecTyKind::NpuBlock(..), ExecTyKind::NpuWarpGrp(..)) => (),
             _ => {
                 let mut print_state = PrintState::new();
                 print_state.print_exec_expr(exec);

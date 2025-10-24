@@ -1,9 +1,9 @@
 // 1. complex types such as CSRGraph should not be references (OK)
 // 2. many initialisations that are not required for correctness because the initialisiation happens
 //    via references in foreign functions
-// 3. references to gpu.local missing (wrongly using gpu.global) (OK)
-// 4. shfl_sync has the wrong execution resource: gpu.warp is not specific enough. It should be
-//    w.forall with w: gpu.warp
+// 3. references to npu.local missing (wrongly using npu.global) (OK)
+// 4. shfl_sync has the wrong execution resource: npu.warp is not specific enough. It should be
+//    w.forall with w: npu.warp
 // 5. changed int (i32) to u32 in quite a few places. The original code compares int and unsigned
 //    several times (not allowed in Descend)
 // 6. wrong synchronization generated (always __syncthreads() instead of __syncwarp())
@@ -13,14 +13,14 @@
 // 10. warpIdx is generated for the warp id. instead generate warp_idx() and add function to descend.cuh
 
 fn sssp_kernel<r: prv, sm_count: nat>(
-    graph: &r shrd gpu.global CSRGraph,
-    wl: &r shrd gpu.global worklist,
+    graph: &r shrd npu.global CSRGraph,
+    wl: &r shrd npu.global worklist,
     // TODO should be uniq and distributed ober global threads in X dimension,
     // but this requires that get_assignment is implemented differently
-    work_count: &r shrd gpu.global u32,
-    [grid.forall(X)] leader_lane_tb_storage: &r uniq gpu.shared [u8; 768*32],
-    [grid.forall(X)] temp_storage: &r uniq gpu.shared [TempStorage; 768/32] // ??? WarpScan::TempStorage
-) -[grid: gpu.grid<X<sm_count-1>, X<768>>]-> () {
+    work_count: &r shrd npu.global u32,
+    [grid.forall(X)] leader_lane_tb_storage: &r uniq npu.shared [u8; 768*32],
+    [grid.forall(X)] temp_storage: &r uniq npu.shared [TempStorage; 768/32] // ??? WarpScan::TempStorage
+) -[grid: npu.grid<X<sm_count-1>, X<768>>]-> () {
     sched block in grid {
         init_regular(wl);
         sched warp in block.to_warps {
@@ -160,55 +160,55 @@ fn sssp_kernel<r: prv, sm_count: nat>(
 cuda struct CSRGraph<r: prv, n: nat> {
     nedges: u32,
     nnodes: u32,
-    row_start: &r shrd gpu.global [u32; n],
-    edge_dst: &r shrd gpu.global [u32; n],
-    edge_data: &r shrd gpu.global [i32; n],
-    node_data: &r shrd gpu.global [i32; n]
+    row_start: &r shrd npu.global [u32; n],
+    edge_dst: &r shrd npu.global [u32; n],
+    edge_data: &r shrd npu.global [i32; n],
+    node_data: &r shrd npu.global [i32; n]
 }
 
 cuda struct worklist {}
 
 cuda struct TempStorage {}
 
-fn epilog(wl: &shrd gpu.global worklist, m_assignment: u64, work_size: u32, coop: bool) -[w: gpu.warp]-> ();
+fn epilog(wl: &shrd npu.global worklist, m_assignment: u64, work_size: u32, coop: bool) -[w: npu.warp]-> ();
 
 fn set_bits(bit_mask: u32, val: u32, start_pos: u32, len: u32) -[a: any]-> u32;
 
-fn atomicMin<r: prv>(ptr: &r shrd gpu.global i32, comp: i32) -[t: gpu.thread]-> ();
+fn atomicMin<r: prv>(ptr: &r shrd npu.global i32, comp: i32) -[t: npu.thread]-> ();
 
-fn init_regular<r: prv>(wl: &r shrd gpu.global worklist) -[b: gpu.block<X<768>>]-> ();
+fn init_regular<r: prv>(wl: &r shrd npu.global worklist) -[b: npu.block<X<768>>]-> ();
 
 fn max(lhs: u32, rhs: u32) -[y: any]-> u32;
 
-fn pop_work(wl: &shrd gpu.global worklist, idx: u32) -[t: gpu.thread]-> u32; //{
+fn pop_work(wl: &shrd npu.global worklist, idx: u32) -[t: npu.thread]-> u32; //{
 //     unsafe cuda {
 //         wl.pop_work(idx);
 //     }
 //}
-fn push_work(wl: &shrd gpu.global worklist, bag_id: u32, node: u32) -[t: gpu.thread]-> ();
+fn push_work(wl: &shrd npu.global worklist, bag_id: u32, node: u32) -[t: npu.thread]-> ();
 fn tb_coop_assign(
-    wl: &shrd gpu.global worklist,
+    wl: &shrd npu.global worklist,
     vertex_id: u32, first_edge: u32, m_assignment: u64, m_size: u32,
     tb_coop_lane: u32
-) -[w: gpu.thread]-> ();
+) -[w: npu.thread]-> ();
 //     unsafe cuda {
 //         wl.tb_coop_assign(vertex_id, first_edge, m_assignment, *m_size, tb_coop_lane);
 //     }
 // }
 fn get_assignment(
-    wl: &shrd gpu.global worklist, graph: &shrd gpu.global CSRGraph,
-// TODO this line is (almost) correct: m_assignment has to be a reference to gpu.local,
-//    m_assignment: &r uniq gpu.global u64, warp_id: u32, work_count: &uniq gpu.global u32,
+    wl: &shrd npu.global worklist, graph: &shrd npu.global CSRGraph,
+// TODO this line is (almost) correct: m_assignment has to be a reference to npu.local,
+//    m_assignment: &r uniq npu.global u64, warp_id: u32, work_count: &uniq npu.global u32,
 // TODO work_count should be a mutable therefore uniq reference
-    m_assignment: u64, warp_id: u32, work_count: &shrd gpu.global u32,
+    m_assignment: u64, warp_id: u32, work_count: &shrd npu.global u32,
     total_work: u32
-) -[w: gpu.warp]-> u32;
+) -[w: npu.warp]-> u32;
 //     unsafe cuda {
 //         wl.get_assignment(*graph, *m_assignment, thread_idx_x()/32, work_count, total_work);
 //     }
 // }
 //
-fn thread_load(addr: &shrd gpu.global i32) -[t: gpu.thread]-> i32;
+fn thread_load(addr: &shrd npu.global i32) -[t: npu.thread]-> i32;
 //     unsafe cuda {
 //         cub::ThreadLoad<cub::LOAD_CG>(addr)
 //     }
@@ -232,13 +232,13 @@ fn find_ms_bit(bit_mask: u32) -[y: any]-> u32;
 // }
 //
 fn cub_exclusive_sum<r: prv>(
-    storage: &r uniq gpu.shared TempStorage,
+    storage: &r uniq npu.shared TempStorage,
     [w.forall(X)] m_size: u32,
     [w.forall(X)] warp_offset: u32,
     warp_total: u32
-) -[w: gpu.warp]-> ();
+) -[w: npu.warp]-> ();
 //     unsafe cuda {
 //         WarpScan(*stoarge).ExclusiveSum(m_size, warp_offset, warp_total);
 //     }
 // }
-fn dist_to_bag_id_int(wl: &shrd gpu.global worklist, bag_id: u32, dst_dist: i32) -[t: gpu.thread]-> u32;
+fn dist_to_bag_id_int(wl: &shrd npu.global worklist, bag_id: u32, dst_dist: i32) -[t: npu.thread]-> u32;

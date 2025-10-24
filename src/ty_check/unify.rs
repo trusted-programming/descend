@@ -238,7 +238,7 @@ impl Constrainable for ExecExpr {
                 }
             }
             (BaseExec::CpuThread, BaseExec::CpuThread) => {}
-            (BaseExec::GpuGrid(gdim1, bdim1), BaseExec::GpuGrid(gdim2, bdim2)) => {
+            (BaseExec::NpuGrid(gdim1, bdim1), BaseExec::NpuGrid(gdim2, bdim2)) => {
                 gdim1.constrain(gdim2, constr_map, prv_rels)?;
                 bdim1.constrain(bdim2, constr_map, prv_rels)?;
             }
@@ -488,28 +488,28 @@ impl Constrainable for ExecTy {
     ) -> UnifyResult<()> {
         match (&mut self.ty, &mut other.ty) {
             (ExecTyKind::CpuThread, ExecTyKind::CpuThread)
-            | (ExecTyKind::GpuThread, ExecTyKind::GpuThread)
-            | (ExecTyKind::GpuWarp, ExecTyKind::GpuWarp)
+            | (ExecTyKind::NpuThread, ExecTyKind::NpuThread)
+            | (ExecTyKind::NpuWarp, ExecTyKind::NpuWarp)
             | (_, ExecTyKind::Any) => Ok(()),
-            (ExecTyKind::GpuWarpGrp(nl), ExecTyKind::GpuWarpGrp(nr)) => {
+            (ExecTyKind::NpuWarpGrp(nl), ExecTyKind::NpuWarpGrp(nr)) => {
                 nl.constrain(nr, constr_map, prv_rels)
             }
-            (ExecTyKind::GpuGrid(lgdim, lbdim), ExecTyKind::GpuGrid(rgdim, rbdim))
-            | (ExecTyKind::GpuBlockGrp(lgdim, lbdim), ExecTyKind::GpuBlockGrp(rgdim, rbdim)) => {
+            (ExecTyKind::NpuGrid(lgdim, lbdim), ExecTyKind::NpuGrid(rgdim, rbdim))
+            | (ExecTyKind::NpuBlockGrp(lgdim, lbdim), ExecTyKind::NpuBlockGrp(rgdim, rbdim)) => {
                 lgdim.constrain(rgdim, constr_map, prv_rels)?;
                 lbdim.constrain(rbdim, constr_map, prv_rels)
             }
             (
-                ExecTyKind::GpuToThreads(ldim_compo, l_inner),
-                ExecTyKind::GpuToThreads(rdim_compo, r_inner),
+                ExecTyKind::NpuToThreads(ldim_compo, l_inner),
+                ExecTyKind::NpuToThreads(rdim_compo, r_inner),
             ) => {
                 if ldim_compo != rdim_compo {
                     return Err(UnifyError::CannotUnify);
                 }
                 l_inner.constrain(r_inner, constr_map, prv_rels)
             }
-            (ExecTyKind::GpuBlock(ldim), ExecTyKind::GpuBlock(rdim))
-            | (ExecTyKind::GpuThreadGrp(ldim), ExecTyKind::GpuThreadGrp(rdim)) => {
+            (ExecTyKind::NpuBlock(ldim), ExecTyKind::NpuBlock(rdim))
+            | (ExecTyKind::NpuThreadGrp(ldim), ExecTyKind::NpuThreadGrp(rdim)) => {
                 ldim.constrain(rdim, constr_map, prv_rels)
             }
             _ => Err(UnifyError::CannotUnify),
@@ -882,7 +882,7 @@ mod tests {
         DataTy::new(DataTyKind::Ref(Box::new(RefDty::new(
             Provenance::Value("r".to_string()),
             Ownership::Shrd,
-            Memory::GpuGlobal,
+            Memory::NpuGm,
             DataTy::new(DataTyKind::Array(
                 Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::I32))),
                 Nat::Ident(Ident::new("n")),
@@ -917,7 +917,7 @@ mod tests {
         let mut shrd_ref_t = DataTy::new(DataTyKind::Ref(Box::new(RefDty::new(
             Provenance::Value("r".to_string()),
             Ownership::Shrd,
-            Memory::GpuGlobal,
+            Memory::NpuGm,
             DataTy::new(DataTyKind::Ident(Ident::new_impli("t"))),
         ))));
         let mut shrd_ref = shrd_ref_ty();
@@ -934,7 +934,7 @@ mod tests {
         let mut shrd_ref_t = DataTy::new(DataTyKind::Ref(Box::new(RefDty::new(
             Provenance::Ident(Ident::new("a")),
             Ownership::Shrd,
-            Memory::GpuGlobal,
+            Memory::NpuGm,
             DataTy::new(DataTyKind::Ident(Ident::new_impli("t"))),
         ))));
         let mut shrd_ref = shrd_ref_ty();

@@ -559,7 +559,7 @@ pub fn walk_exec<V: Visit>(visitor: &mut V, exec: &ExecExprKind) {
     match base {
         BaseExec::CpuThread => (),
         BaseExec::Ident(ident) => visitor.visit_ident(ident),
-        BaseExec::GpuGrid(gdim, bdim) => {
+        BaseExec::NpuGrid(gdim, bdim) => {
             visitor.visit_dim(gdim);
             visitor.visit_dim(bdim);
         }

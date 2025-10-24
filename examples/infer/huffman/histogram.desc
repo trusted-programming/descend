@@ -4,19 +4,19 @@ fn hist<s: prv, o: prv, gs:nat, ts:nat>(
     h_in: &s shrd cpu.mem [u8; gs*256*ts],
     h_out: &o uniq cpu.mem [u32; 256]
 ) -[t: cpu.thread]-> () {
-    let mut gpu = gpu_device(0);
+    let mut npu = npu_device(0);
 
-    let buffer = gpu_alloc_copy(&uniq gpu, &shrd *h_in);
-    let mut histo = gpu_alloc_copy(&uniq gpu, &shrd *h_out);
-    gpu_hist::<<<X<gs>, X<256>; [u32; 256]>>>(&shrd buffer, &uniq histo);
+    let buffer = npu_alloc_copy(&uniq npu, &shrd *h_in);
+    let mut histo = npu_alloc_copy(&uniq npu, &shrd *h_out);
+    npu_hist::<<<X<gs>, X<256>; [u32; 256]>>>(&shrd buffer, &uniq histo);
     copy_to_host(&shrd histo, h_out)
 }
 
-fn gpu_hist<gs:nat, ts:nat, r1: prv, r2: prv, r3: prv>(
-    buffer: &r1 shrd gpu.global [u8; gs*256*ts],
-    histo: &r2 uniq gpu.global [u32; 256],
-    [grid.forall(X)] temp: &r3 uniq gpu.shared [u32; 256]
-) -[grid: gpu.grid<X<gs>, X<256>>]-> () {
+fn npu_hist<gs:nat, ts:nat, r1: prv, r2: prv, r3: prv>(
+    buffer: &r1 shrd npu.global [u8; gs*256*ts],
+    histo: &r2 uniq npu.global [u32; 256],
+    [grid.forall(X)] temp: &r3 uniq npu.shared [u32; 256]
+) -[grid: npu.grid<X<gs>, X<256>>]-> () {
     let buffer_grouped = &shrd (*buffer).to_view.grp::<(gs*256)>.transp.grp::<256>;
     let histo_atomic = to_atomic_array(histo);
     sched block in grid {

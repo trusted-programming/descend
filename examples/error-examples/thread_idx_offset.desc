@@ -3,22 +3,22 @@ fn inplace_vector_add<n: nat, a: prv, b: prv, o: prv>(
     hb_array: &b shrd cpu.mem [i32; n],
     offset: &o shrd cpu.mem [i32; n]
 ) -[t: cpu.thread]-> () {
-    let mut gpu = gpu_device(0);
+    let mut npu = npu_device(0);
 
-    let mut a_array = gpu_alloc_copy(&uniq gpu, &shrd *ha_array);
-    let b_array = gpu_alloc_copy(&uniq gpu, &shrd *hb_array);
-    let offset_gpu = gpu_alloc_copy(&uniq gpu, &shrd *offset);
+    let mut a_array = npu_alloc_copy(&uniq npu, &shrd *ha_array);
+    let b_array = npu_alloc_copy(&uniq npu, &shrd *hb_array);
+    let offset_npu = npu_alloc_copy(&uniq npu, &shrd *offset);
     
-    gpu_vec_add::<<<X<64>, X<1024>>>>(&uniq a_array, &shrd b_array, &shrd offset_gpu);
+    npu_vec_add::<<<X<64>, X<1024>>>>(&uniq a_array, &shrd b_array, &shrd offset_npu);
 
     copy_to_host(&shrd a_array, ha_array)
 }
 
-fn gpu_vec_add<r: prv, n: nat>(
-    a_array: &r uniq gpu.global [i32; n],
-    b_array: &r shrd gpu.global [i32; n],
-    offset: &r shrd gpu.global [i32; n]
-) -[grid: gpu.grid<X<64>, X<1024>>]-> () {
+fn npu_vec_add<r: prv, n: nat>(
+    a_array: &r uniq npu.global [i32; n],
+    b_array: &r shrd npu.global [i32; n],
+    offset: &r shrd npu.global [i32; n]
+) -[grid: npu.grid<X<64>, X<1024>>]-> () {
     sched block in grid {
         sched thread in block {
             let a_ref = &uniq (*a_array).to_view.grp::<1024>[[block]][[thread + offset]];

@@ -1,17 +1,17 @@
 fn transpose<r: prv>(
     h_vec: &r uniq cpu.mem [[f64; 2048]; 2048]
 ) -[t: cpu.thread]-> () {
-    let mut gpu = gpu_device(0);
-    let d_vec = gpu_alloc_copy(&uniq gpu, &shrd *h_vec);
-    let mut d_vec_out = gpu_alloc_copy(&uniq gpu, &shrd *h_vec);
+    let mut npu = npu_device(0);
+    let d_vec = npu_alloc_copy(&uniq npu, &shrd *h_vec);
+    let mut d_vec_out = npu_alloc_copy(&uniq npu, &shrd *h_vec);
     par_transpose::<<<X<64>, X<32>>>>(&shrd d_vec, &uniq d_vec_out);
     copy_to_host(&shrd d_vec_out, h_vec)
 }
 
 fn par_transpose<r: prv>(
-    in_vec: &r shrd gpu.global [[f64; 2048]; 2048],
-    out_vec: &r uniq gpu.global [[f64; 2048]; 2048]
-) -[grid: gpu.grid<X<64>, X<32>>]-> () {
+    in_vec: &r shrd npu.global [[f64; 2048]; 2048],
+    out_vec: &r uniq npu.global [[f64; 2048]; 2048]
+) -[grid: npu.grid<X<64>, X<32>>]-> () {
     sched block in grid {
         sched thread in block {
             (*out_vec).to_view.map(to_view).transp[[block]][[thread]] =

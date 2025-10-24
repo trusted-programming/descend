@@ -1,10 +1,10 @@
 fn add<n: nat, r: prv>(
-    a: &r shrd gpu.global [i16; 16],
-    b: &r shrd gpu.global [i16; 16],
-    c: &r uniq gpu.global [i16; 16],
-    d: &r uniq gpu.global [i16; 16],
-    e: &r uniq gpu.global [i16; 16]
-) -[grid: gpu.grid<X<1>, X<16>>]-> () {
+    a: &r shrd npu.global [i16; 16],
+    b: &r shrd npu.global [i16; 16],
+    c: &r uniq npu.global [i16; 16],
+    d: &r uniq npu.global [i16; 16],
+    e: &r uniq npu.global [i16; 16]
+) -[grid: npu.grid<X<1>, X<16>>]-> () {
     d = a + b;
     e = b + c;
     ()

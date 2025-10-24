@@ -24,7 +24,7 @@ pub(super) fn ty_check(
             }
         }
         BaseExec::CpuThread => ExecTyKind::CpuThread,
-        BaseExec::GpuGrid(gdim, bdim) => ExecTyKind::GpuGrid(gdim.clone(), bdim.clone()),
+        BaseExec::NpuGrid(gdim, bdim) => ExecTyKind::NpuGrid(gdim.clone(), bdim.clone()),
     };
 
     for e in &exec_expr.exec.path {
@@ -51,7 +51,7 @@ pub(super) fn ty_check(
 }
 
 fn ty_check_exec_to_threads(d: DimCompo, exec_ty: &ExecTyKind) -> TyResult<ExecTyKind> {
-    if let ExecTyKind::GpuGrid(gdim, bdim) = exec_ty {
+    if let ExecTyKind::NpuGrid(gdim, bdim) = exec_ty {
         let (rest_gdim, rem_gdim) = remove_dim(gdim, d)?;
         let (rest_bdim, rem_bdim) = remove_dim(bdim, d)?;
         let global_dim = match (rem_gdim, rem_bdim) {
@@ -78,9 +78,9 @@ fn ty_check_exec_to_threads(d: DimCompo, exec_ty: &ExecTyKind) -> TyResult<ExecT
             }
         };
         match (rest_gdim, rest_bdim) {
-            (Some(rest_gdim), Some(rest_bdim)) => Ok(ExecTyKind::GpuToThreads(
+            (Some(rest_gdim), Some(rest_bdim)) => Ok(ExecTyKind::NpuToThreads(
                 global_dim,
-                Box::new(ExecTy::new(ExecTyKind::GpuBlockGrp(rest_gdim, rest_bdim))),
+                Box::new(ExecTy::new(ExecTyKind::NpuBlockGrp(rest_gdim, rest_bdim))),
             )),
             _ => unimplemented!(),
         }
@@ -91,15 +91,15 @@ fn ty_check_exec_to_threads(d: DimCompo, exec_ty: &ExecTyKind) -> TyResult<ExecT
 
 fn ty_check_exec_to_warps(nat_ctx: &NatCtx, exec_ty: &ExecTyKind) -> TyResult<ExecTyKind> {
     match exec_ty {
-        ExecTyKind::GpuBlock(dim) => match dim.clone() {
+        ExecTyKind::NpuBlock(dim) => match dim.clone() {
             Dim::X(d) => {
                 if d.0.eval(nat_ctx)? % 32 != 0 {
                     Err(TyError::String(format!(
-                        "Size of GpuBlock needs to be evenly divisible by 32 to create warps, instead got: {:?}",
+                        "Size of NpuBlock needs to be evenly divisible by 32 to create warps, instead got: {:?}",
                         exec_ty
                     )))
                 } else {
-                    Ok(ExecTyKind::GpuWarpGrp(Nat::BinOp(
+                    Ok(ExecTyKind::NpuWarpGrp(Nat::BinOp(
                         BinOpNat::Div,
                         Box::new(d.0),
                         Box::new(Nat::Lit(32)),
@@ -107,7 +107,7 @@ fn ty_check_exec_to_warps(nat_ctx: &NatCtx, exec_ty: &ExecTyKind) -> TyResult<Ex
                 }
             }
             _ => Err(TyError::String(format!(
-                "GpuBlock needs to be one-dimensional to create warps, instead got: {:?}",
+                "NpuBlock needs to be one-dimensional to create warps, instead got: {:?}",
                 exec_ty
             ))),
         },
@@ -120,45 +120,45 @@ fn ty_check_exec_to_warps(nat_ctx: &NatCtx, exec_ty: &ExecTyKind) -> TyResult<Ex
 
 fn ty_check_exec_forall(d: DimCompo, exec_ty: &ExecTyKind) -> TyResult<ExecTyKind> {
     let res_ty = match exec_ty {
-        ExecTyKind::GpuGrid(gdim, bdim) => {
+        ExecTyKind::NpuGrid(gdim, bdim) => {
             let inner_dim = remove_dim(gdim, d)?.0;
             match inner_dim {
-                Some(dim) => ExecTyKind::GpuGrid(dim, bdim.clone()),
-                None => ExecTyKind::GpuBlock(bdim.clone()),
+                Some(dim) => ExecTyKind::NpuGrid(dim, bdim.clone()),
+                None => ExecTyKind::NpuBlock(bdim.clone()),
             }
         }
-        ExecTyKind::GpuBlockGrp(gdim, bdim) => {
+        ExecTyKind::NpuBlockGrp(gdim, bdim) => {
             let inner_dim = remove_dim(gdim, d)?.0;
             match inner_dim {
-                Some(dim) => ExecTyKind::GpuBlockGrp(dim, bdim.clone()),
-                None => ExecTyKind::GpuBlock(bdim.clone()),
+                Some(dim) => ExecTyKind::NpuBlockGrp(dim, bdim.clone()),
+                None => ExecTyKind::NpuBlock(bdim.clone()),
             }
         }
-        ExecTyKind::GpuBlock(bdim) => {
+        ExecTyKind::NpuBlock(bdim) => {
             let inner_dim = remove_dim(bdim, d)?.0;
             match inner_dim {
-                Some(dim) => ExecTyKind::GpuBlock(dim),
-                None => ExecTyKind::GpuThread,
+                Some(dim) => ExecTyKind::NpuBlock(dim),
+                None => ExecTyKind::NpuThread,
             }
         }
-        ExecTyKind::GpuThreadGrp(tdim) => {
+        ExecTyKind::NpuThreadGrp(tdim) => {
             let inner_dim = remove_dim(tdim, d)?.0;
             match inner_dim {
-                Some(dim) => ExecTyKind::GpuThreadGrp(dim),
-                None => ExecTyKind::GpuThread,
+                Some(dim) => ExecTyKind::NpuThreadGrp(dim),
+                None => ExecTyKind::NpuThread,
             }
         }
-        ExecTyKind::GpuWarpGrp(_) => ExecTyKind::GpuWarp,
-        ExecTyKind::GpuWarp => ExecTyKind::GpuThread,
-        ExecTyKind::GpuToThreads(dim, inner_exec) => {
+        ExecTyKind::NpuWarpGrp(_) => ExecTyKind::NpuWarp,
+        ExecTyKind::NpuWarp => ExecTyKind::NpuThread,
+        ExecTyKind::NpuToThreads(dim, inner_exec) => {
             if dim_compo_matches_dim(d, dim) {
                 inner_exec.ty.clone()
             } else {
                 let forall_inner = ty_check_exec_forall(d, &inner_exec.ty)?;
-                ExecTyKind::GpuToThreads(dim.clone(), Box::new(ExecTy::new(forall_inner)))
+                ExecTyKind::NpuToThreads(dim.clone(), Box::new(ExecTy::new(forall_inner)))
             }
         }
-        ex @ ExecTyKind::CpuThread | ex @ ExecTyKind::GpuThread | ex @ ExecTyKind::Any => {
+        ex @ ExecTyKind::CpuThread | ex @ ExecTyKind::NpuThread | ex @ ExecTyKind::Any => {
             return Err(TyError::String(format!("Cannot schedule over {:?}", ex)))
         }
     };
@@ -227,41 +227,41 @@ fn ty_check_exec_take_range(
 ) -> TyResult<ExecTyKind> {
     // TODO check well-formedness of Nats
     let (lexec_ty, rexec_ty) = match exec_ty {
-        ExecTyKind::GpuGrid(gdim, bdim) | ExecTyKind::GpuBlockGrp(gdim, bdim) => {
+        ExecTyKind::NpuGrid(gdim, bdim) | ExecTyKind::NpuBlockGrp(gdim, bdim) => {
             let (ldim, rdim) = split_dim(d, n.clone(), gdim.clone())?;
             (
-                ExecTyKind::GpuBlockGrp(ldim, bdim.clone()),
-                ExecTyKind::GpuBlockGrp(rdim, bdim.clone()),
+                ExecTyKind::NpuBlockGrp(ldim, bdim.clone()),
+                ExecTyKind::NpuBlockGrp(rdim, bdim.clone()),
             )
         }
-        ExecTyKind::GpuBlock(dim) | ExecTyKind::GpuThreadGrp(dim) => {
+        ExecTyKind::NpuBlock(dim) | ExecTyKind::NpuThreadGrp(dim) => {
             let (ldim, rdim) = split_dim(d, n.clone(), dim.clone())?;
             (
-                ExecTyKind::GpuThreadGrp(ldim),
-                ExecTyKind::GpuThreadGrp(rdim),
+                ExecTyKind::NpuThreadGrp(ldim),
+                ExecTyKind::NpuThreadGrp(rdim),
             )
         }
-        ExecTyKind::GpuToThreads(dim, inner) => {
+        ExecTyKind::NpuToThreads(dim, inner) => {
             if dim_compo_matches_dim(d, dim) {
                 let (ldim, rdim) = split_dim(d, n.clone(), dim.clone())?;
                 (
-                    ExecTyKind::GpuToThreads(ldim, inner.clone()),
-                    ExecTyKind::GpuToThreads(rdim, inner.clone()),
+                    ExecTyKind::NpuToThreads(ldim, inner.clone()),
+                    ExecTyKind::NpuToThreads(rdim, inner.clone()),
                 )
-            } else if let ExecTyKind::GpuBlockGrp(gdim, bdim) = &inner.ty {
+            } else if let ExecTyKind::NpuBlockGrp(gdim, bdim) = &inner.ty {
                 let (ldim, rdim) = split_dim(d, n.clone(), gdim.clone())?;
                 (
-                    ExecTyKind::GpuToThreads(
+                    ExecTyKind::NpuToThreads(
                         dim.clone(),
-                        Box::new(ExecTy::new(ExecTyKind::GpuBlockGrp(ldim, bdim.clone()))),
+                        Box::new(ExecTy::new(ExecTyKind::NpuBlockGrp(ldim, bdim.clone()))),
                     ),
-                    ExecTyKind::GpuToThreads(
+                    ExecTyKind::NpuToThreads(
                         dim.clone(),
-                        Box::new(ExecTy::new(ExecTyKind::GpuBlockGrp(rdim, bdim.clone()))),
+                        Box::new(ExecTy::new(ExecTyKind::NpuBlockGrp(rdim, bdim.clone()))),
                     ),
                 )
             } else {
-                panic!("GpuToThreads is not well-formed.")
+                panic!("NpuToThreads is not well-formed.")
             }
         }
         ex => {

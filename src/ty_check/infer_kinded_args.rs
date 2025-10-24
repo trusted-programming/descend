@@ -110,7 +110,7 @@ fn infer_kargs_exec_expr(
 ) {
     match (&poly_exec_expr.exec.base, &mono_exec_expr.exec.base) {
         (BaseExec::Ident(i1), BaseExec::Ident(i2)) if i1 == i2 => (),
-        (BaseExec::GpuGrid(gdim1, bdim1), BaseExec::GpuGrid(gdim2, bdim2)) => {
+        (BaseExec::NpuGrid(gdim1, bdim1), BaseExec::NpuGrid(gdim2, bdim2)) => {
             infer_kargs_dims(map, gdim1, gdim2);
             infer_kargs_dims(map, bdim1, bdim2);
         }
@@ -125,17 +125,17 @@ fn infer_kargs_exec_level(
     mono_exec_level: &ExecTy,
 ) {
     match (&poly_exec_level.ty, &mono_exec_level.ty) {
-        (ExecTyKind::GpuGrid(gdim1, bdim1), ExecTyKind::GpuGrid(gdim2, bdim2))
-        | (ExecTyKind::GpuBlockGrp(gdim1, bdim1), ExecTyKind::GpuBlockGrp(gdim2, bdim2)) => {
+        (ExecTyKind::NpuGrid(gdim1, bdim1), ExecTyKind::NpuGrid(gdim2, bdim2))
+        | (ExecTyKind::NpuBlockGrp(gdim1, bdim1), ExecTyKind::NpuBlockGrp(gdim2, bdim2)) => {
             infer_kargs_dims(map, gdim1, gdim2);
             infer_kargs_dims(map, bdim1, bdim2);
         }
-        (ExecTyKind::GpuBlock(dim1), ExecTyKind::GpuBlock(dim2))
-        | (ExecTyKind::GpuThreadGrp(dim1), ExecTyKind::GpuThreadGrp(dim2)) => {
+        (ExecTyKind::NpuBlock(dim1), ExecTyKind::NpuBlock(dim2))
+        | (ExecTyKind::NpuThreadGrp(dim1), ExecTyKind::NpuThreadGrp(dim2)) => {
             infer_kargs_dims(map, dim1, dim2);
         }
         (ExecTyKind::CpuThread, ExecTyKind::CpuThread)
-        | (ExecTyKind::GpuThread, ExecTyKind::GpuThread)
+        | (ExecTyKind::NpuThread, ExecTyKind::NpuThread)
         | (ExecTyKind::Any, ExecTyKind::Any) => {}
         _ => panic_no_inst!(),
     }

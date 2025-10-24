@@ -1,16 +1,16 @@
 fn reduce<gs: nat, bs: nat, a: prv>(
   ha_array: &a uniq cpu.mem [i32; gs*bs]
 ) -[t: cpu.thread]-> () {
-    let mut gpu: Gpu = gpu_device(0);
+    let mut npu: Npu = npu_device(0);
 
-    let mut a_array = gpu_alloc_copy(&uniq gpu, &shrd *ha_array);
-    gpu_reduce::<<<X<gs>, X<bs>>>>(&uniq a_array);
+    let mut a_array = npu_alloc_copy(&uniq npu, &shrd *ha_array);
+    npu_reduce::<<<X<gs>, X<bs>>>>(&uniq a_array);
     copy_to_host(&shrd a_array, ha_array)
 }
 
-fn gpu_reduce<r: prv, gs: nat, bs: nat>(
-    input: &r uniq gpu.global [i32; gs*bs]
-) -[grid: gpu.grid<X<gs>, X<bs>>]-> () {
+fn npu_reduce<r: prv, gs: nat, bs: nat>(
+    input: &r uniq npu.global [i32; gs*bs]
+) -[grid: npu.grid<X<gs>, X<bs>>]-> () {
     sched block in grid {
         let ib = &uniq (*input).to_view.grp::<bs>[[block]];
         for k in halved_range(bs/2) {
