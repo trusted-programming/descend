@@ -547,11 +547,7 @@ impl KindCtx {
     pub fn get_idents(&self, kind: Kind) -> impl Iterator<Item = &Ident> {
         self.ctx.iter().flatten().filter_map(move |entry| {
             if let KindingCtxEntry::Ident(IdentKinded { ident, kind: k }) = entry {
-                if k == &kind {
-                    Some(ident)
-                } else {
-                    None
-                }
+                if k == &kind { Some(ident) } else { None }
             } else {
                 None
             }

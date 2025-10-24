@@ -5,10 +5,10 @@ pub mod to_mlir;
 use builder::MlirBuilder;
 use error::MlirError;
 use melior::{
-    dialect::DialectRegistry,
-    ir::{operation::OperationLike, Location, Module},
-    utility::register_all_dialects,
     Context,
+    dialect::DialectRegistry,
+    ir::{Location, Module, operation::OperationLike},
+    utility::register_all_dialects,
 };
 
 use crate::ast::CompilUnit;

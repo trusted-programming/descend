@@ -4,7 +4,7 @@ use melior::{
 };
 
 use super::super::error::MlirError;
-use super::context::{create_index_constant, MlirContext};
+use super::context::{MlirContext, create_index_constant};
 use super::expr::build_expr;
 use super::nat::build_nat;
 use crate::ast as desc;

@@ -4,7 +4,7 @@ use melior::{
 };
 
 use super::super::error::MlirError;
-use super::context::{append_yield, MlirContext};
+use super::context::{MlirContext, append_yield};
 use super::expr::build_expr;
 use crate::ast as desc;
 

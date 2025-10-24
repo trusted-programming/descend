@@ -123,35 +123,22 @@ pub fn with_related(report: miette::Report, _related_text: &str) -> miette::Repo
 }
 
 /// Enum representing different types of compilation errors
-#[derive(Error, Diagnostic, Debug, Clone)]
+#[derive(Error, Debug, Clone)]
 pub enum CompileError {
     #[error(transparent)]
-    #[diagnostic(
-        code(descend::file_io_error),
-        help("Check that the file exists and you have permission to read it")
-    )]
     FileIO(#[from] FileIOErrorData),
 
-    #[error(transparent)]
-    #[diagnostic(
-        code(descend::parse_error),
-        help("Check the syntax of your Descend code")
-    )]
-    Parse(#[from] ParseErrorData),
+    #[error("{0}")]
+    Parse(ParseErrorData),
 
     #[error(transparent)]
-    #[diagnostic(
-        code(descend::type_check_error),
-        help("Check your type annotations and variable usage")
-    )]
     TypeCheck(#[from] TypeCheckErrorData),
 
     #[error(transparent)]
-    #[diagnostic(
-        code(descend::codegen_error),
-        help("This is an internal compiler error. Please report it as a bug")
-    )]
     Codegen(#[from] CodegenErrorData),
+
+    #[error(transparent)]
+    MissingMain(#[from] MissingMainErrorData),
 }
 
 /// Data for FileIO errors with miette diagnostic support
@@ -181,7 +168,7 @@ pub struct ParseErrorData {
     pub message: String,
 
     #[label("Parse error location")]
-    pub span: Option<SourceSpan>,
+    pub span: SourceSpan,
 }
 
 /// Data for TypeCheck errors with miette diagnostic support
@@ -196,13 +183,13 @@ pub struct TypeCheckErrorData {
 
     #[label("Type error location")]
     pub span: Option<SourceSpan>,
-    
+
     /// Additional labeled spans for complex errors (e.g., conflicting borrows)
     pub secondary_spans: Vec<(SourceSpan, String)>,
-    
+
     /// Additional help text
     pub help_text: Option<String>,
-    
+
     /// Related information
     pub related: Option<String>,
 }
@@ -221,6 +208,18 @@ pub struct CodegenErrorData {
     pub span: Option<SourceSpan>,
 }
 
+/// Data for MissingMain errors with miette diagnostic support
+#[derive(Error, Diagnostic, Debug, Clone)]
+#[error("Missing main function")]
+#[diagnostic(
+    code(descend::missing_main_error),
+    help("A main function is required as the entry point of your program")
+)]
+pub struct MissingMainErrorData {
+    pub message: String,
+    pub help_text: Option<String>,
+}
+
 impl CompileError {
     /// Attach source code to the error for beautiful display
     pub fn with_source_code(self, source: miette::NamedSource<String>) -> miette::Report {
@@ -228,8 +227,52 @@ impl CompileError {
     }
 }
 
+impl Diagnostic for CompileError {
+    fn code<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        match self {
+            CompileError::Parse(_) => Some(Box::new("descend::parse_error")),
+            CompileError::FileIO(_) => Some(Box::new("descend::file_io_error")),
+            CompileError::TypeCheck(_) => Some(Box::new("descend::type_check_error")),
+            CompileError::Codegen(_) => Some(Box::new("descend::codegen_error")),
+            CompileError::MissingMain(_) => Some(Box::new("descend::missing_main_error")),
+        }
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        match self {
+            CompileError::Parse(_) => Some(Box::new("Check the syntax of your Descend code")),
+            CompileError::FileIO(_) => Some(Box::new(
+                "Check that the file exists and you have permission to read it",
+            )),
+            CompileError::TypeCheck(_) => {
+                Some(Box::new("Check your type annotations and variable usage"))
+            }
+            CompileError::Codegen(_) => Some(Box::new(
+                "This is an internal compiler error. Please report it as a bug",
+            )),
+            CompileError::MissingMain(_) => Some(Box::new(
+                "A main function is required as the entry point of your program",
+            )),
+        }
+    }
+
+    fn labels<'a>(&'a self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + 'a>> {
+        match self {
+            CompileError::Parse(parse_err) => {
+                let start: usize = parse_err.span.offset().into();
+                let end = start + parse_err.span.len();
+                Some(Box::new(std::iter::once(LabeledSpan::new_with_span(
+                    Some("Parse error location".to_string()),
+                    start..end,
+                ))))
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Convert ErrorKind to human-readable message
-fn error_kind_to_message(kind: std::io::ErrorKind) -> String {
+pub fn error_kind_to_message(kind: std::io::ErrorKind) -> String {
     match kind {
         std::io::ErrorKind::NotFound => "entity not found".to_string(),
         std::io::ErrorKind::PermissionDenied => "permission denied".to_string(),
@@ -239,23 +282,14 @@ fn error_kind_to_message(kind: std::io::ErrorKind) -> String {
     }
 }
 
-/// Convert std::io::Error to CompileError for easy error handling
-impl From<std::io::Error> for CompileError {
-    fn from(error: std::io::Error) -> Self {
-        CompileError::FileIO(FileIOErrorData {
-            file_path: "unknown file".to_string(),
-            io_error_kind: error.kind(),
-            error_message: error_kind_to_message(error.kind()),
-            span: None,
-        })
-    }
-}
+// Note: std::io::Error should be converted through SourceCode::from_file
+// to preserve the file path information
 
 /// Convert TyError to CompileError with span preservation
 impl From<crate::ty_check::error::TyError> for CompileError {
     fn from(error: crate::ty_check::error::TyError) -> Self {
         use crate::ty_check::error::TyError;
-        
+
         match error {
             TyError::MultiError(errors) => {
                 // For now, just take the first error. In the future, we could collect all errors
@@ -286,7 +320,7 @@ impl From<crate::ty_check::error::TyError> for CompileError {
                 expected_printer.print_dty(&expected);
                 let mut actual_printer = PrintState::new();
                 actual_printer.print_dty(&actual);
-                
+
                 CompileError::TypeCheck(TypeCheckErrorData {
                     message: format!("Expected `{}` but found `{}`", expected_printer.get(), actual_printer.get()),
                     span: expr.span.map(|s| s.into()),
@@ -298,15 +332,15 @@ impl From<crate::ty_check::error::TyError> for CompileError {
             TyError::ConflictingBorrow(place_expr, ownership, conflict) => {
                 let mut secondary_spans = vec![];
                 let mut help_text = "This borrow conflicts with an existing borrow. Consider restructuring your code to avoid simultaneous borrows.".to_string();
-                
+
                 // Add secondary span for the conflicting location
                 if let Some(place_span) = place_expr.span {
                     secondary_spans.push((place_span.into(), "conflicting borrow".to_string()));
                 }
-                
+
                 // Add ownership-specific help
                 help_text.push_str(&format!(" Ownership: {:?}.", ownership));
-                
+
                 CompileError::TypeCheck(TypeCheckErrorData {
                     message: "Conflicting borrow detected".to_string(),
                     span: place_expr.span.map(|s| s.into()),
@@ -366,7 +400,7 @@ impl From<crate::ty_check::error::TyError> for CompileError {
                         use crate::ty_check::error::UnifyContext;
                         use crate::ast::printer::PrintState;
                         use crate::ast::TyKind;
-                        
+
                         // Pretty print the types
                         let mut left_printer = PrintState::new();
                         if let TyKind::Data(dty) = &left_type.ty {
@@ -376,7 +410,7 @@ impl From<crate::ty_check::error::TyError> for CompileError {
                         if let TyKind::Data(dty) = &right_type.ty {
                             right_printer.print_dty(dty);
                         }
-                        
+
                         // Format context description
                         let context_desc = match context {
                             UnifyContext::FunctionParameter(idx) => format!("function parameter {}", idx + 1),
@@ -390,7 +424,7 @@ impl From<crate::ty_check::error::TyError> for CompileError {
                             UnifyContext::Expression(_) => "expression".to_string(),
                             UnifyContext::Other(desc) => desc.clone(),
                         };
-                        
+
                         CompileError::TypeCheck(TypeCheckErrorData {
                             message: format!("Expected `{}` but found `{}` in {}", right_printer.get(), left_printer.get(), context_desc),
                             span: span.map(|s| s.into()),
@@ -465,7 +499,7 @@ impl From<crate::ty_check::error::TyError> for CompileError {
                         if let Some(span) = shorter.span {
                             secondary_spans.push((span.into(), "shorter lifetime".to_string()));
                         }
-                        
+
                         CompileError::TypeCheck(TypeCheckErrorData {
                             message: "Outlives relation not defined".to_string(),
                             span: None,
@@ -486,12 +520,9 @@ impl From<crate::ty_check::error::TyError> for CompileError {
                 }
             }
             TyError::MissingMain => {
-                CompileError::TypeCheck(TypeCheckErrorData {
+                CompileError::MissingMain(MissingMainErrorData {
                     message: "Missing main function".to_string(),
-                    span: None,
-                    secondary_spans: vec![],
                     help_text: Some("A main function is required as the entry point of your program.".to_string()),
-                    related: None,
                 })
             }
             TyError::NatEvalError(nat_err, span) => {

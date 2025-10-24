@@ -19,17 +19,17 @@
 //! All functions return `Result<T, MlirError>` for proper error handling.
 
 use super::super::error::{
-    missing_result_error, operation_build_error, type_parse_error, MlirError,
+    MlirError, missing_result_error, operation_build_error, type_parse_error,
 };
 use melior::{
+    Context,
     dialect::{arith, scf},
     ir::{
+        BlockLike, BlockRef, Location, Type, Value,
         attribute::{FloatAttribute, IntegerAttribute},
         operation::OperationBuilder,
         r#type::IntegerType,
-        BlockLike, BlockRef, Location, Type, Value,
     },
-    Context,
 };
 use std::collections::HashMap;
 

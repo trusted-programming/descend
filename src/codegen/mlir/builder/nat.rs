@@ -1,7 +1,7 @@
 use melior::ir::Value;
 
 use super::super::error::MlirError;
-use super::context::{create_index_constant, MlirContext};
+use super::context::{MlirContext, create_index_constant};
 use super::ops::build_nat_binary_operation;
 use crate::ast as desc;
 

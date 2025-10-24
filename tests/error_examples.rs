@@ -2,64 +2,44 @@
 // instead of using the macro which is designed for successful compilation tests
 
 use descend::error::CompileError;
-use std::io::ErrorKind;
 
 #[test]
-fn test_fileio_error() {
+fn fileio_error() {
     // Test compilation of a non-existent file which should fail with a FileIO error
-    let err = descend::compile("examples/error-examples/nonexistent_file.desc")
-        .err()
-        .unwrap();
-
-    // Also test the full miette diagnostic output
-    let miette_report = miette::Report::new(err.clone());
-
-    // Use the graphical handler to get fancy output
-    let handler = miette::GraphicalReportHandler::new();
-    let mut output = String::new();
-    handler
-        .render_report(&mut output, miette_report.as_ref())
-        .unwrap();
-
-    insta::assert_snapshot!(output);
-
-    // Assert that compilation failed with a FileIO error
-    match err {
-        CompileError::FileIO(data) => {
-            assert_eq!(
-                data.file_path,
-                "examples/error-examples/nonexistent_file.desc"
-            );
-            assert_eq!(data.io_error_kind, ErrorKind::NotFound);
-        }
-        _ => panic!("Expected FileIO error, got {:?}", err),
-    }
+    let err = test_error_compilation("examples/error-examples/nonexistent_file.desc");
+    assert!(matches!(err, CompileError::FileIO(_)));
+}
+#[test]
+fn missing_main_error() {
+    // Test compilation of a file without a main function which should fail with a MissingMain error
+    let err = test_error_compilation("examples/error-examples/missing_main.desc");
+    assert!(matches!(err, CompileError::MissingMain(_)));
 }
 
 #[test]
-fn test_missing_main_error() {
-    // Test the missing main error directly by calling the type checker
-    use descend::parser::SourceCode;
-    use descend::ty_check::error::TyError;
+fn parse_error() {
+    let err = test_error_compilation("examples/error-examples/parse_error.desc");
+    assert!(matches!(err, CompileError::Parse(_)));
+}
 
-    // Parse the file first
-    let source = SourceCode::from_file("examples/error-examples/missing_main.desc").unwrap();
-    let mut compil_unit = descend::parser::parse(&source).unwrap();
+fn test_error_compilation(file_path: &str) -> CompileError {
+    // Test compilation of a file which should fail with the expected error
+    let result = descend::compile(file_path);
+    let err: CompileError = result.err().unwrap();
 
-    // Call type checker directly to get the actual MissingMain error
-    let result = descend::ty_check::ty_check(&mut compil_unit);
-    assert!(result.is_err()); // Should fail with MissingMain error
-
-    // Test the actual MissingMain error diagnostic
-    let missing_main_error = TyError::MissingMain;
-    let miette_report = miette::Report::new(missing_main_error);
+    // Also test the full miette diagnostic output with source code
+    let miette_report = descend::compile_with_source(file_path).err().unwrap();
 
     // Use the graphical handler to get fancy output
-    let handler = miette::GraphicalReportHandler::new();
+    // Disable colors in CI environment to ensure consistent snapshots
+    let theme = miette::GraphicalTheme::unicode_nocolor();
+
+    let handler = miette::GraphicalReportHandler::new_themed(theme);
     let mut output = String::new();
     handler
         .render_report(&mut output, miette_report.as_ref())
         .unwrap();
 
-    insta::assert_snapshot!(output);
+    insta::assert_snapshot!(file_path, output);
+    err
 }

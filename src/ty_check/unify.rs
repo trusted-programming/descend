@@ -154,10 +154,10 @@ impl Constrainable for FnTy {
         substitute(constr_map, other);
 
         if self.param_sigs.len() != other.param_sigs.len() {
-                    return Err(UnifyError::cannot_unify_unknown(
-                        "function parameter count mismatch",
-                        None,
-                    ));
+            return Err(UnifyError::cannot_unify_unknown(
+                "function parameter count mismatch",
+                None,
+            ));
         }
         // TODO refactor
         // substitute result of unification for every following unification
@@ -249,10 +249,7 @@ impl Constrainable for ExecExpr {
                 bdim1.constrain(bdim2, constr_map, prv_rels)?;
             }
             _ => {
-                return Err(UnifyError::cannot_unify_unknown(
-                    "unification failed",
-                    None,
-                ));
+                return Err(UnifyError::cannot_unify_unknown("unification failed", None));
             }
         }
 
@@ -298,10 +295,7 @@ impl Constrainable for ExecExpr {
                 }
                 (ExecPathElem::ToWarps, ExecPathElem::ToWarps) => {}
                 _ => {
-                    return Err(UnifyError::cannot_unify_unknown(
-                        "unification failed",
-                        None,
-                    ));
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 }
             }
 
@@ -365,10 +359,7 @@ impl Constrainable for DataTy {
                 } else if i1 == i2 {
                     return Ok(());
                 } else {
-                    return Err(UnifyError::cannot_unify_unknown(
-                        "unification failed",
-                        None,
-                    ));
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 }
                 substitute(constr_map, self);
                 substitute(constr_map, other);
@@ -383,10 +374,7 @@ impl Constrainable for DataTy {
             }
             (DataTyKind::Scalar(sty1), DataTyKind::Scalar(sty2)) => {
                 if sty1 != sty2 {
-                    return Err(UnifyError::cannot_unify_unknown(
-                        "unification failed",
-                        None,
-                    ));
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 } else {
                     return Ok(());
                 }
@@ -406,10 +394,7 @@ impl Constrainable for DataTy {
                 } = ref2.as_mut();
 
                 if own1 != own2 {
-                    return Err(UnifyError::cannot_unify_unknown(
-                        "unification failed",
-                        None,
-                    ));
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 }
                 rgn1.constrain(rgn2, constr_map, prv_rels)?;
                 substitute(constr_map, &mut **dty1);
@@ -492,10 +477,7 @@ impl Constrainable for DataTy {
             }
             (DataTyKind::Atomic(sty1), DataTyKind::Atomic(sty2)) => {
                 if sty1 != sty2 {
-                    return Err(UnifyError::cannot_unify_unknown(
-                        "unification failed",
-                        None,
-                    ));
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 } else {
                     return Ok(());
                 }
@@ -512,10 +494,7 @@ impl Constrainable for DataTy {
                 substitute(constr_map, other);
             }
             _ => {
-                return Err(UnifyError::cannot_unify_unknown(
-                    "unification failed",
-                    None,
-                ));
+                return Err(UnifyError::cannot_unify_unknown("unification failed", None));
             }
         }
         Ok(())
@@ -554,10 +533,7 @@ impl Constrainable for ExecTy {
                 ExecTyKind::NpuToThreads(rdim_compo, r_inner),
             ) => {
                 if ldim_compo != rdim_compo {
-                    return Err(UnifyError::cannot_unify_unknown(
-                        "unification failed",
-                        None,
-                    ));
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 }
                 l_inner.constrain(r_inner, constr_map, prv_rels)
             }
@@ -565,10 +541,7 @@ impl Constrainable for ExecTy {
             | (ExecTyKind::NpuThreadGrp(ldim), ExecTyKind::NpuThreadGrp(rdim)) => {
                 ldim.constrain(rdim, constr_map, prv_rels)
             }
-            _ => Err(UnifyError::cannot_unify_unknown(
-                "unification failed",
-                None,
-            )),
+            _ => Err(UnifyError::cannot_unify_unknown("unification failed", None)),
         }
     }
 }
@@ -602,10 +575,7 @@ impl Constrainable for Dim {
             (Dim::X(ld), Dim::X(rd)) | (Dim::Y(ld), Dim::Y(rd)) | (Dim::Z(ld), Dim::Z(rd)) => {
                 ld.0.constrain(&mut rd.0, constr_map, prv_rels)
             }
-            _ => Err(UnifyError::cannot_unify_unknown(
-                "unification failed",
-                None,
-            )),
+            _ => Err(UnifyError::cannot_unify_unknown("unification failed", None)),
         }
     }
 }
@@ -741,10 +711,7 @@ impl Constrainable for Memory {
             (Memory::Ident(i), o) => o.bind_to(i, constr_map),
             (s, Memory::Ident(i)) => s.bind_to(i, constr_map),
             (mem1, mem2) if mem1 == mem2 => Ok(()),
-            _ => Err(UnifyError::cannot_unify_unknown(
-                "unification failed",
-                None,
-            )),
+            _ => Err(UnifyError::cannot_unify_unknown("unification failed", None)),
         }
     }
 }

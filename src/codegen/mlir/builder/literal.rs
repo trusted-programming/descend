@@ -1,7 +1,7 @@
-use melior::ir::{attribute::IntegerAttribute, r#type::IntegerType, Value};
+use melior::ir::{Value, attribute::IntegerAttribute, r#type::IntegerType};
 
 use super::super::error::MlirError;
-use super::context::{create_constant, create_float_constant, create_int_constant, MlirContext};
+use super::context::{MlirContext, create_constant, create_float_constant, create_int_constant};
 use crate::ast as desc;
 
 /// Build a literal constant

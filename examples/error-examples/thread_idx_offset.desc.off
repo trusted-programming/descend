@@ -21,8 +21,10 @@ fn npu_vec_add<r: prv, n: nat>(
 ) -[grid: npu.grid<X<64>, X<1024>>]-> () {
     sched block in grid {
         sched thread in block {
-            let a_ref = &uniq (*a_array).to_view.grp::<1024>[[block]][[thread + offset]];
-            *a_ref = *a_ref + (*b_array).to_view.grp::<1024>[[block]][[thread + offset]]
+            let a = thread + offset;
+            let b = thread + offset;
+            let a_ref = &uniq (*a_array).to_view.grp::<1024>[[block]][[a]];
+            *a_ref = *a_ref + (*b_array).to_view.grp::<1024>[[block]][[b]]
         }
     }
 }

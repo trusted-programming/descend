@@ -170,7 +170,9 @@ impl PlaceCtx {
             PlaceCtx::Hole => PlaceCtx::Hole,
             PlaceCtx::Proj(pl_ctx, i) => {
                 if let PlaceCtx::Hole = **pl_ctx {
-                    panic!("There must be an innermost deref context as created by PlaceExpr.to_pl_ctx_and_most_specif_pl.")
+                    panic!(
+                        "There must be an innermost deref context as created by PlaceExpr.to_pl_ctx_and_most_specif_pl."
+                    )
                 } else {
                     let inner_ctx = pl_ctx.without_innermost_deref();
                     PlaceCtx::Proj(Box::new(inner_ctx), *i)
@@ -178,7 +180,9 @@ impl PlaceCtx {
             }
             PlaceCtx::FieldProj(pl_ctx, field_name) => {
                 if let PlaceCtx::Hole = **pl_ctx {
-                    panic!("There must be an innermost deref context as created by PlaceExpr.to_pl_ctx_and_most_specif_pl.")
+                    panic!(
+                        "There must be an innermost deref context as created by PlaceExpr.to_pl_ctx_and_most_specif_pl."
+                    )
                 } else {
                     let inner_ctx = pl_ctx.without_innermost_deref();
                     PlaceCtx::FieldProj(Box::new(inner_ctx), field_name.clone())

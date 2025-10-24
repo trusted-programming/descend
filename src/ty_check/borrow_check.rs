@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::ty_check::ctxs::{AccessCtx, GlobalCtx, KindCtx};
 use crate::ty_check::error::BorrowingError;
 use crate::ty_check::exec::normalize;
-use crate::ty_check::{exec, pre_decl, ExprTyCtx};
+use crate::ty_check::{ExprTyCtx, exec, pre_decl};
 use std::collections::HashSet;
 
 type OwnResult<T> = Result<T, BorrowingError>;
@@ -445,7 +445,7 @@ fn conflicting_path(pathl: &[PlExprPathElem], pathr: &[PlExprPathElem]) -> bool 
             (v @ PlExprPathElem::View(iv), path_elem)
                 if v != path_elem && iv.name.name.as_ref() != pre_decl::SELECT_RANGE =>
             {
-                return true
+                return true;
             }
             (PlExprPathElem::View(ivl), PlExprPathElem::View(ivr))
                 if ivl != ivr

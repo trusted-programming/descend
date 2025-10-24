@@ -1,6 +1,6 @@
 use melior::ir::Value;
 
-use super::super::error::{missing_result_error, MlirError};
+use super::super::error::{MlirError, missing_result_error};
 use super::context::MlirContext;
 use super::control_flow::{build_if, build_if_else};
 use super::literal::build_literal;
@@ -154,7 +154,7 @@ where
         ExprKind::App(ident, _gen_args, args) => {
             use melior::{
                 dialect::func,
-                ir::{attribute::FlatSymbolRefAttribute, BlockLike, Type},
+                ir::{BlockLike, Type, attribute::FlatSymbolRefAttribute},
             };
 
             // Lower operands

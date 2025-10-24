@@ -1,15 +1,15 @@
+use super::TyResult;
 use super::borrow_check::BorrowCheckCtx;
 use super::error::TyError;
-use super::TyResult;
 use crate::ast::{
-    utils, DataTy, DataTyKind, ExecExpr, ExecTyKind, FnTy, Ident, IdentExec, Memory, Nat, NatCtx,
-    Ownership, ParamSig, PlaceExpr, PlaceExprKind, Provenance, Ty, TyKind, View,
+    DataTy, DataTyKind, ExecExpr, ExecTyKind, FnTy, Ident, IdentExec, Memory, Nat, NatCtx,
+    Ownership, ParamSig, PlaceExpr, PlaceExprKind, Provenance, Ty, TyKind, View, utils,
 };
 use crate::ty_check::ctxs::{AccessCtx, GlobalCtx, KindCtx, TyCtx};
 
 use crate::ty_check::unify;
 use crate::ty_check::unify::ConstrainMap;
-use crate::ty_check::{exec, ExprTyCtx};
+use crate::ty_check::{ExprTyCtx, exec};
 
 pub(super) struct PlExprTyCtx<'gl, 'src, 'ctxt> {
     gl_ctx: &'ctxt GlobalCtx<'gl, 'src>,
@@ -414,7 +414,7 @@ fn ty_check_index(
         _ => {
             return Err(TyError::String(
                 "Trying to index into non array type.".to_string(),
-            ))
+            ));
         }
     };
 

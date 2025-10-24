@@ -2,13 +2,13 @@ use crate::ast::{
     AtomicTy, BaseExec, DataTy, DataTyKind, FunDef, Memory, Nat, NatCtx, ScalarTy, Ty, TyKind,
 };
 use melior::{
+    Context,
     dialect::func,
     ir::{
+        Identifier, Location, Operation, Region, Type,
         attribute::{Attribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType, MemRefType, TupleType},
-        Identifier, Location, Operation, Region, Type,
     },
-    Context,
 };
 pub trait ToMlir {
     type Output<'c>;
@@ -761,8 +761,11 @@ mod tests {
         let signature = generate_function_with_body(&npu_fun, &context);
 
         // Check that the signature contains the NPU attributes
-        assert!(signature
-            .contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
+        assert!(
+            signature.contains(
+                "attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"
+            )
+        );
         assert!(signature.contains("func.func @npu_kernel"));
         assert!(signature.contains(") attributes"));
     }
@@ -774,8 +777,11 @@ mod tests {
         let signature = generate_function_with_body(&cpu_fun, &context);
 
         // Check that the signature does NOT contain NPU attributes
-        assert!(!signature
-            .contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
+        assert!(
+            !signature.contains(
+                "attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"
+            )
+        );
         assert!(signature.contains("func.func @cpu_function"));
         assert!(signature.contains(") {"));
         assert!(!signature.contains(") attributes"));

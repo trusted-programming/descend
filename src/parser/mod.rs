@@ -14,9 +14,13 @@ pub use source::*;
 pub fn parse<'a>(source: &'a SourceCode<'a>) -> Result<CompilUnit<'a>, CompileError> {
     let parser = Parser::new(source);
     let mut items = parser.parse().map_err(|err| {
+        let span = err.extract_span().unwrap_or_else(|| {
+            // Fallback to a default span if extraction fails
+            miette::SourceSpan::new(miette::SourceOffset::from(0), 1)
+        });
         CompileError::Parse(ParseErrorData {
             message: format!("Parse error: {}", err),
-            span: None, // TODO: Extract span from ParseError
+            span,
         })
     })?;
     // TODO refactor to not require unnecessary copying out of items
@@ -309,6 +313,26 @@ pub mod error {
     impl<'a> ParseError<'a> {
         pub(super) fn new(parser: &'a Parser, err: PegError<LineCol>) -> Self {
             ParseError { parser, err }
+        }
+
+        /// Extract the source span from the parse error
+        pub fn extract_span(&self) -> Option<miette::SourceSpan> {
+            let line_num = u32::try_from(self.err.location.line).ok()?;
+            let column_num = u32::try_from(self.err.location.column).ok()?;
+
+            // Convert from 1-based to 0-based line numbers
+            let line_num = line_num - 1;
+            // Convert from 1-based to 0-based column numbers
+            let column_num = column_num - 1;
+
+            // Get the byte offset for the error location
+            let start_offset = self.parser.source.get_offset(line_num, column_num);
+            let end_offset = start_offset + 1; // Single character span
+
+            Some(miette::SourceSpan::new(
+                miette::SourceOffset::from(start_offset),
+                end_offset - start_offset,
+            ))
         }
 
         pub fn emit(&self) -> ErrorReported {

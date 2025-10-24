@@ -1,6 +1,6 @@
 use clap::Parser;
 use descend;
-use descend::error::CompileError;
+use miette::IntoDiagnostic;
 use std::fs;
 use std::path::PathBuf;
 
@@ -20,7 +20,7 @@ struct Args {
     print_ast: bool,
 }
 
-fn main() -> Result<(), CompileError> {
+fn main() -> miette::Result<()> {
     miette::set_panic_hook();
 
     let args = Args::parse();
@@ -30,7 +30,7 @@ fn main() -> Result<(), CompileError> {
     let output_dir = &args.output_dir;
 
     // Compile using Descend
-    let (code_string, ast_string) = descend::compile(&input_path.to_string_lossy())?;
+    let (code_string, ast_string) = descend::compile_with_source(&input_path.to_string_lossy())?;
 
     // Generate output file path with appropriate extension
     let filename_stem = input_path.file_stem().unwrap_or_default().to_string_lossy();
@@ -40,11 +40,11 @@ fn main() -> Result<(), CompileError> {
     if print_ast {
         let ast_file = output_dir.join(format!("{}.ast", filename_stem));
         // Write result to file
-        fs::write(&ast_file, ast_string)?;
+        fs::write(&ast_file, ast_string).into_diagnostic()?;
         println!("AST file written successfully to: {}", ast_file.display());
     }
     // Write result to file
-    fs::write(&code_file, code_string)?;
+    fs::write(&code_file, code_string).into_diagnostic()?;
     println!("code file written successfully to: {}", code_file.display());
 
     Ok(())

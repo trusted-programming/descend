@@ -2,7 +2,7 @@ use super::{
     BaseExec, BinOpNat, Dim, Dim1d, Dim2d, DimCompo, ExecExpr, ExecPathElem, ExecTy, ExecTyKind,
     IdentExec, Nat, TyCtx, TyError, TyResult,
 };
-use crate::ast::{LeftOrRight, NatCtx, Ty, TyKind, DataTy, DataTyKind, ScalarTy};
+use crate::ast::{DataTy, DataTyKind, LeftOrRight, NatCtx, ScalarTy, Ty, TyKind};
 
 pub(super) fn ty_check(
     nat_ctx: &NatCtx,
@@ -74,7 +74,7 @@ fn ty_check_exec_to_threads(d: DimCompo, exec_ty: &ExecTyKind) -> TyResult<ExecT
                 return Err(TyError::String(format!(
                     "Provided dimension {} does not exist",
                     d
-                )))
+                )));
             }
         };
         match (rest_gdim, rest_bdim) {
@@ -85,7 +85,9 @@ fn ty_check_exec_to_threads(d: DimCompo, exec_ty: &ExecTyKind) -> TyResult<ExecT
             _ => unimplemented!(),
         }
     } else {
-        Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::I32)))))))
+        Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(
+            DataTy::new(DataTyKind::Scalar(ScalarTy::I32)),
+        )))))
     }
 }
 
@@ -159,7 +161,7 @@ fn ty_check_exec_forall(d: DimCompo, exec_ty: &ExecTyKind) -> TyResult<ExecTyKin
             }
         }
         ex @ ExecTyKind::CpuThread | ex @ ExecTyKind::NpuThread | ex @ ExecTyKind::Any => {
-            return Err(TyError::String(format!("Cannot schedule over {:?}", ex)))
+            return Err(TyError::String(format!("Cannot schedule over {:?}", ex)));
         }
     };
     Ok(res_ty)
@@ -268,7 +270,7 @@ fn ty_check_exec_take_range(
             return Err(TyError::String(format!(
                 "Trying to split non-splittable execution resource: {:?}",
                 ex
-            )))
+            )));
         }
     };
     Ok(if proj == LeftOrRight::Left {

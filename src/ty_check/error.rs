@@ -453,7 +453,9 @@ impl UnifyError {
     /// Create a CannotUnify error for unknown types (used in unification failures)
     pub fn cannot_unify_unknown(context: &str, span: Option<crate::ast::Span>) -> Self {
         use crate::ast::*;
-        let unknown_ty = Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::I32)))));
+        let unknown_ty = Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Scalar(
+            ScalarTy::I32,
+        )))));
         UnifyError::CannotUnify {
             left_type: unknown_ty.clone(),
             right_type: unknown_ty,

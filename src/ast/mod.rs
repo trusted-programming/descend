@@ -1649,13 +1649,11 @@ impl NatCtx {
     }
 
     pub fn find(&self, name: &str) -> Option<usize> {
-        self.frames.iter().flatten().rev().find_map(|(i, n)| {
-            if i.as_ref() == name {
-                Some(*n)
-            } else {
-                None
-            }
-        })
+        self.frames
+            .iter()
+            .flatten()
+            .rev()
+            .find_map(|(i, n)| if i.as_ref() == name { Some(*n) } else { None })
     }
 
     pub fn push_empty_frame(&mut self) -> &mut Self {
