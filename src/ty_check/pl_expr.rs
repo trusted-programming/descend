@@ -372,7 +372,7 @@ fn ty_check_select(
     let (mems, prvs) = ty_check_and_passed_mems_prvs(&outer_ctx, p)?;
     let mut p_dty = p.ty.as_ref().unwrap().dty().clone();
     match p_dty.dty {
-        DataTyKind::Array(elem_dty, n) | DataTyKind::ArrayShape(elem_dty, n) => {
+        DataTyKind::Array(elem_dty, _n) | DataTyKind::ArrayShape(elem_dty, _n) => {
             // TODO check sizes
             // if n != distrib_exec.active_distrib_size() {
             //     return Err(TyError::String("There must be as many elements in the view

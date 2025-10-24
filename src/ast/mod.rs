@@ -430,6 +430,12 @@ impl Ident {
     }
 }
 
+impl fmt::Display for Ident {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     Ident(Mutability, Ident),
@@ -1222,6 +1228,17 @@ pub enum DimCompo {
     Z,
 }
 
+impl fmt::Display for DimCompo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let str = match self {
+            Self::X => "x",
+            Self::Y => "y",
+            Self::Z => "z",
+        };
+        write!(f, "{}", str)
+    }
+}
+
 #[span_derive(PartialEq, Eq, Hash)]
 #[derive(Debug, Clone)]
 pub struct DataTy {
@@ -1568,6 +1585,46 @@ pub enum Nat {
     App(Ident, Box<[Nat]>),
 }
 
+impl fmt::Display for BinOpNat {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let str = match self {
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Mul => "*",
+            Self::Div => "/",
+            Self::Mod => "%",
+        };
+        write!(f, "{}", str)
+    }
+}
+
+impl fmt::Display for Nat {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Ident(ident) => write!(f, "{}", ident),
+            Self::Lit(n) => write!(f, "{}", n),
+            Self::ThreadIdx(dim) => write!(f, "threadIdx.{}", dim),
+            Self::BlockIdx(dim) => write!(f, "blockIdx.{}", dim),
+            Self::BlockDim(dim) => write!(f, "blockDim.{}", dim),
+            Self::WarpGrpIdx => write!(f, "warpGrpIdx"),
+            Self::WarpIdx => write!(f, "warpIdx"),
+            Self::LaneIdx => write!(f, "laneIdx"),
+            Self::GridIdx => write!(f, "gridIdx"),
+            Self::BinOp(op, left, right) => write!(f, "({} {} {})", left, op, right),
+            Self::App(ident, args) => {
+                write!(f, "{}(", ident)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
 pub struct NatCtx {
     frames: Vec<Vec<(Box<str>, usize)>>,
 }
@@ -1619,6 +1676,7 @@ impl NatCtx {
 }
 
 #[derive(Debug)]
+#[allow(unused)]
 pub struct NatEvalError {
     unevaluable: Nat,
 }

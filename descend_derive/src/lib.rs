@@ -209,7 +209,7 @@ pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
                 test_functions.push(quote! {
                     #[test]
                     fn #test_name_ident() -> Result<(), descend::error::ErrorReported> {
-                        let output = descend::compile(#file_path_lit, crate::BACKEND)?.0;
+                        let output = descend::compile(#file_path_lit)?.0;
                         insta::assert_snapshot!(output);
                         Ok(())
                     }

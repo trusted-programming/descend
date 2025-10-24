@@ -98,7 +98,7 @@ pub(super) fn borrow_check(ctx: &BorrowCheckCtx, p: &PlaceExpr) -> OwnResult<Has
             },
             DataTyKind::RawPtr(_) => ownership_safe_deref_raw(ctx, &pl_ctx_no_deref, &most_spec_pl),
             // TODO improve error message
-            t => ownership_safe_place(ctx, p), //panic!("Is the type dead? `{:?}`\n {:?}", t, p),
+            _t => ownership_safe_place(ctx, p), //panic!("Is the type dead? `{:?}`\n {:?}", t, p),
         }
     }
 }
@@ -459,10 +459,10 @@ fn conflicting_path(pathl: &[PlExprPathElem], pathr: &[PlExprPathElem]) -> bool 
                     &ivr.gen_args[1],
                 ) {
                     (
-                        ArgKinded::Nat(lower_left),
-                        ArgKinded::Nat(upper_left),
-                        ArgKinded::Nat(lower_right),
-                        ArgKinded::Nat(upper_right),
+                        ArgKinded::Nat(_lower_left),
+                        ArgKinded::Nat(_upper_left),
+                        ArgKinded::Nat(_lower_right),
+                        ArgKinded::Nat(_upper_right),
                     ) => {
                         // intersecting ranges
                         // TAKE CARE: the comparisons are partial and return false in case the

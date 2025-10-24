@@ -27,6 +27,7 @@ macro_rules! print_static_list {
     };
 }
 
+#[allow(unused)]
 impl PrintState {
     pub fn new() -> Self {
         PrintState {

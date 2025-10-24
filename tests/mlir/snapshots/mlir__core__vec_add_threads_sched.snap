@@ -1,0 +1,12 @@
+---
+source: tests/mlir/core.rs
+expression: output
+---
+module {
+  func.func @gpu_vec_add(%arg0: memref<i32, #hivm.address_space<gm>>, %arg1: memref<i32, #hivm.address_space<gm>>) attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>} {
+    return
+  }
+  func.func @main() {
+    return
+  }
+}

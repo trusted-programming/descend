@@ -382,9 +382,9 @@ impl TyCtx {
     }
 
     // Γ ▷- p = Γ′
-    pub(super) fn without_reborrow_loans(&mut self, pl_expr: &PlaceExpr) -> &mut Self {
+    pub(super) fn without_reborrow_loans(&mut self, _pl_expr: &PlaceExpr) -> &mut Self {
         for frame_entry in self.flat_bindings_mut() {
-            if let FrameEntry::PrvMapping(PrvMapping { prv: _, loans }) = frame_entry {
+            if let FrameEntry::PrvMapping(PrvMapping { prv: _, loans: _ }) = frame_entry {
                 // FIXME not prefix_of but *x within p?
                 // let without_reborrow: HashSet<Loan> = loans
                 //     .iter()
@@ -506,15 +506,6 @@ impl KindCtx {
         Ok(kind_ctx)
     }
 
-    pub fn push_empty_scope(&mut self) -> &mut Self {
-        self.ctx.push(vec![]);
-        self
-    }
-
-    pub fn drop_scope(&mut self) {
-        self.ctx.pop();
-    }
-
     pub fn append_idents<I: IntoIterator<Item = IdentKinded>>(&mut self, idents: I) -> &mut Self {
         let entries = idents.into_iter().map(KindingCtxEntry::Ident);
         for e in entries {
@@ -584,6 +575,7 @@ impl KindCtx {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(super) enum GlobalDecl {
     FnDecl(Box<str>, Box<FnTy>),
     StructDecl(Box<StructDecl>),

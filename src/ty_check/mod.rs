@@ -351,7 +351,7 @@ fn ty_check_for(
 
     let ident_dty = match &collec_dty.dty {
         // TODO
-        DataTyKind::Array(elem_dty, n) => unimplemented!(),
+        DataTyKind::Array(_elem_dty, _n) => unimplemented!(),
         DataTyKind::Ref(reff) => match &reff.dty.as_ref().dty {
             DataTyKind::Array(elem_dty, _) => DataTyKind::Ref(Box::new(RefDty::new(
                 reff.rgn.clone(),
@@ -671,6 +671,7 @@ fn ty_check_block(ctx: &mut ExprTyCtx, block: &mut Block) -> TyResult<Ty> {
     Ok(block.body.ty.as_ref().unwrap().as_ref().clone())
 }
 
+#[allow(unused)]
 fn collect_valid_loans(ty_ctx: &TyCtx, mut loans: HashSet<Loan>) -> HashSet<Loan> {
     // FIXME this implementations assumes unique names which is not the case
     loans.retain(|l| {
@@ -797,10 +798,10 @@ fn ty_check_idx_assign(
         ));
     };
     let (n, own, mem, dty) = match &pl_expr_dty.dty {
-        DataTyKind::Array(elem_dty, n) => unimplemented!(), //(Ty::Data(*elem_ty), n),
-        DataTyKind::At(arr_dty, mem) => {
+        DataTyKind::Array(_elem_dty, _n) => unimplemented!(), //(Ty::Data(*elem_ty), n),
+        DataTyKind::At(arr_dty, _mem) => {
             if let DataTy {
-                dty: DataTyKind::Array(elem_dty, n),
+                dty: DataTyKind::Array(_elem_dty, _n),
                 ..
             } = arr_dty.as_ref()
             {
@@ -962,7 +963,7 @@ fn ty_check_binary_op(
     }
 }
 
-fn ty_check_unary_op(ctx: &mut ExprTyCtx, un_op: &UnOp, e: &mut Expr) -> TyResult<Ty> {
+fn ty_check_unary_op(ctx: &mut ExprTyCtx, _un_op: &UnOp, e: &mut Expr) -> TyResult<Ty> {
     ty_check_expr(ctx, e)?;
     let e_ty = e.ty.as_ref().unwrap();
     let e_dty = if let TyKind::Data(dty) = &e_ty.ty {
@@ -1151,7 +1152,11 @@ fn apply_gen_args_checked(
     Ok(())
 }
 
-fn check_arg_has_correct_kind(kind_ctx: &KindCtx, expected: &Kind, kv: &ArgKinded) -> TyResult<()> {
+fn check_arg_has_correct_kind(
+    _kind_ctx: &KindCtx,
+    expected: &Kind,
+    kv: &ArgKinded,
+) -> TyResult<()> {
     if expected == &kv.kind() {
         Ok(())
     } else {
@@ -1368,6 +1373,7 @@ fn ty_check_tuple(ctx: &mut ExprTyCtx, elems: &mut [Expr]) -> TyResult<Ty> {
     )))))
 }
 
+#[allow(unused)]
 fn ty_check_proj(ctx: &mut ExprTyCtx, e: &mut Expr, i: usize) -> TyResult<Ty> {
     if let ExprKind::PlaceExpr(_) = e.expr {
         panic!("Place expression should have been typechecked by a different rule.")
@@ -1674,6 +1680,7 @@ pub fn accessible_memory(exec_ty: &ExecTy, mem: &Memory) -> TyResult<()> {
     }
 }
 
+#[allow(unused)]
 // TODO respect memory
 fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty) -> TyResult<()> {
     match &ty.ty {
@@ -1763,7 +1770,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                     ty_well_formed(kind_ctx, ty_ctx, exec_ty, &Ty::new(TyKind::Data(Box::new(dty.clone()))))?;
                 }
             }
-            DataTyKind::Array(elem_dty, n) => {
+            DataTyKind::Array(elem_dty, _n) => {
                 ty_well_formed(
                     kind_ctx,
                     ty_ctx,
@@ -1772,7 +1779,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                 )?;
                 // TODO well-formed nat
             }
-            DataTyKind::ArrayShape(elem_dty, n) => {
+            DataTyKind::ArrayShape(elem_dty, _n) => {
                 ty_well_formed(
                     kind_ctx,
                     ty_ctx,

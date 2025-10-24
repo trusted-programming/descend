@@ -12,9 +12,6 @@ module {
     hivm.hir.load ins(%arg2 : memref<16xi16, #hivm.address_space<gm>>) outs(%alloc_1 : memref<16xi16, #hivm.address_space<ub>>)
     %alloc_2 = memref.alloc() : memref<16xi16, #hivm.address_space<ub>>
     hivm.hir.vadd ins(%alloc, %alloc_0 : memref<16xi16, #hivm.address_space<ub>>, memref<16xi16, #hivm.address_space<ub>>) outs(%alloc_2 : memref<16xi16, #hivm.address_space<ub>>)
-    %alloc_3 = memref.alloc() : memref<16xi16, #hivm.address_space<ub>>
-    hivm.hir.vadd ins(%alloc_2, %alloc_1 : memref<16xi16, #hivm.address_space<ub>>, memref<16xi16, #hivm.address_space<ub>>) outs(%alloc_3 : memref<16xi16, #hivm.address_space<ub>>)
-    hivm.hir.store ins(%alloc_3 : memref<16xi16, #hivm.address_space<ub>>) outs(%arg3 : memref<16xi16, #hivm.address_space<gm>>)
     return
   }
 }

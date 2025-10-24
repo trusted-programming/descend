@@ -1,31 +1,69 @@
 use crate::ast::*;
 
-#[rustfmt::skip]
+#[allow(unused)]
 pub trait Visit: Sized {
     fn visit_binary_op_nat(&mut self, _op: &BinOpNat) {}
-    fn visit_nat(&mut self, n: &Nat) { walk_nat(self, n) }
-    fn visit_nat_range(&mut self, nr: &NatRange) { walk_nat_range(self, nr) }
-    fn visit_ident_kinded(&mut self, id_kind: &IdentKinded) { walk_ident_kinded(self, id_kind) }
-    fn visit_ident_exec(&mut self, ident_exec: &IdentExec) { walk_ident_exec(self, ident_exec) }
-    fn visit_prv_rel(&mut self, prv_rel: &PrvRel) { walk_prv_rel(self, prv_rel) }
+    fn visit_nat(&mut self, n: &Nat) {
+        walk_nat(self, n)
+    }
+    fn visit_nat_range(&mut self, nr: &NatRange) {
+        walk_nat_range(self, nr)
+    }
+    fn visit_ident_kinded(&mut self, id_kind: &IdentKinded) {
+        walk_ident_kinded(self, id_kind)
+    }
+    fn visit_ident_exec(&mut self, ident_exec: &IdentExec) {
+        walk_ident_exec(self, ident_exec)
+    }
+    fn visit_prv_rel(&mut self, prv_rel: &PrvRel) {
+        walk_prv_rel(self, prv_rel)
+    }
     fn visit_exec_ty(&mut self, _exec: &ExecTy) {}
-    fn visit_mem(&mut self, mem: &Memory) { walk_mem(self, mem) }
-    fn visit_prv(&mut self, prv: &Provenance) { walk_prv(self, prv) }
+    fn visit_mem(&mut self, mem: &Memory) {
+        walk_mem(self, mem)
+    }
+    fn visit_prv(&mut self, prv: &Provenance) {
+        walk_prv(self, prv)
+    }
     fn visit_scalar_ty(&mut self, _sty: &ScalarTy) {}
     fn visit_atomic_ty(&mut self, _aty: &AtomicTy) {}
-    fn visit_dim_compo(&mut self, _dim_compo: &DimCompo) { }
-    fn visit_dim(&mut self, dim: &Dim) { walk_dim(self, dim) }
-    fn visit_dim3d(&mut self, dim3d: &Dim3d) { walk_dim3d(self, dim3d) }
-    fn visit_dim2d(&mut self, dim2d: &Dim2d) { walk_dim2d(self, dim2d) }
-    fn visit_dim1d(&mut self, dim1d: &Dim1d) { walk_dim1d(self, dim1d) }
-    fn visit_ref(&mut self, reff: &RefDty) { walk_ref(self, reff) }
-    fn visit_dty(&mut self, dty: &DataTy) { walk_dty(self, dty) }
-    fn visit_fn_ty(&mut self, fn_ty: &FnTy) { walk_fn_ty(self, fn_ty) }
-    fn visit_nat_constr(&mut self, nat_constr: &NatConstr) { walk_nat_constr(self, nat_constr) }
-    fn visit_ty(&mut self, ty: &Ty) { walk_ty(self, ty) }
-    fn visit_view(&mut self, view: &View) { walk_view(self, view) }
-    fn visit_pl_expr(&mut self, pl_expr: &PlaceExpr) { walk_pl_expr(self, pl_expr) }
-    fn visit_arg_kinded(&mut self, arg_kinded: &ArgKinded) { walk_arg_kinded(self, arg_kinded) }
+    fn visit_dim_compo(&mut self, _dim_compo: &DimCompo) {}
+    fn visit_dim(&mut self, dim: &Dim) {
+        walk_dim(self, dim)
+    }
+    fn visit_dim3d(&mut self, dim3d: &Dim3d) {
+        walk_dim3d(self, dim3d)
+    }
+    fn visit_dim2d(&mut self, dim2d: &Dim2d) {
+        walk_dim2d(self, dim2d)
+    }
+    fn visit_dim1d(&mut self, dim1d: &Dim1d) {
+        walk_dim1d(self, dim1d)
+    }
+    fn visit_ref(&mut self, reff: &RefDty) {
+        walk_ref(self, reff)
+    }
+    fn visit_dty(&mut self, dty: &DataTy) {
+        walk_dty(self, dty)
+    }
+    fn visit_fn_ty(&mut self, fn_ty: &FnTy) {
+        walk_fn_ty(self, fn_ty)
+    }
+    fn visit_nat_constr(&mut self, nat_constr: &NatConstr) {
+        walk_nat_constr(self, nat_constr)
+    }
+    fn visit_ty(&mut self, ty: &Ty) {
+        walk_ty(self, ty)
+    }
+    fn visit_view(&mut self, view: &View) {
+        walk_view(self, view)
+    }
+    fn visit_pl_expr(&mut self, pl_expr: &PlaceExpr) {
+        walk_pl_expr(self, pl_expr)
+    }
+    fn visit_arg_kinded(&mut self, arg_kinded: &ArgKinded) {
+        walk_arg_kinded(self, arg_kinded)
+    }
     fn visit_kind(&mut self, _kind: &Kind) {}
     fn visit_binary_op(&mut self, _op: &BinOp) {}
     fn visit_unary_op(&mut self, _op: &UnOp) {}
@@ -33,20 +71,48 @@ pub trait Visit: Sized {
     fn visit_mutability(&mut self, _mutbl: &Mutability) {}
     fn visit_lit(&mut self, _lit: &Lit) {}
     fn visit_ident(&mut self, _ident: &Ident) {}
-    fn visit_pattern(&mut self, pattern: &Pattern) { walk_pattern(self, pattern) }
-    fn visit_split(&mut self, split: &Split) { walk_split(self, split) }
-    fn visit_sched(&mut self, par_for: &Sched) { walk_sched(self, par_for) }
-    fn visit_expr(&mut self, expr: &Expr) { walk_expr(self, expr) }
-    fn visit_app_kernel(&mut self, app_kernel: &AppKernel) { walk_app_kernel(self, app_kernel) }
-    fn visit_block(&mut self, block: &Block) { walk_block(self, block) }
-    fn visit_split_proj(&mut self, exec_split: &TakeRange) { walk_split_proj(self, exec_split) }
-    fn visit_exec_expr(&mut self, exec_expr: &ExecExpr) { walk_exec_expr(self, exec_expr) }
-    fn visit_exec(&mut self, exec: &ExecExprKind) { walk_exec(self, exec) }
-    fn visit_param_decl(&mut self, param_decl: &ParamDecl) { walk_param_decl(self, param_decl) }
-    fn visit_fun_def(&mut self, fun_def: &FunDef) { walk_fun_def(self, fun_def) }
-    fn visit_fun_decl(&mut self, fun_decl: &FunDecl) { walk_fun_decl(self, fun_decl) }
-    fn visit_param_sig(&mut self, param_sig: &ParamSig) { walk_param_sig(self, param_sig) }
-    fn visit_field(&mut self, field: &(Ident, DataTy)) { walk_field(self, field) }
+    fn visit_pattern(&mut self, pattern: &Pattern) {
+        walk_pattern(self, pattern)
+    }
+    fn visit_split(&mut self, split: &Split) {
+        walk_split(self, split)
+    }
+    fn visit_sched(&mut self, par_for: &Sched) {
+        walk_sched(self, par_for)
+    }
+    fn visit_expr(&mut self, expr: &Expr) {
+        walk_expr(self, expr)
+    }
+    fn visit_app_kernel(&mut self, app_kernel: &AppKernel) {
+        walk_app_kernel(self, app_kernel)
+    }
+    fn visit_block(&mut self, block: &Block) {
+        walk_block(self, block)
+    }
+    fn visit_split_proj(&mut self, exec_split: &TakeRange) {
+        walk_split_proj(self, exec_split)
+    }
+    fn visit_exec_expr(&mut self, exec_expr: &ExecExpr) {
+        walk_exec_expr(self, exec_expr)
+    }
+    fn visit_exec(&mut self, exec: &ExecExprKind) {
+        walk_exec(self, exec)
+    }
+    fn visit_param_decl(&mut self, param_decl: &ParamDecl) {
+        walk_param_decl(self, param_decl)
+    }
+    fn visit_fun_def(&mut self, fun_def: &FunDef) {
+        walk_fun_def(self, fun_def)
+    }
+    fn visit_fun_decl(&mut self, fun_decl: &FunDecl) {
+        walk_fun_decl(self, fun_decl)
+    }
+    fn visit_param_sig(&mut self, param_sig: &ParamSig) {
+        walk_param_sig(self, param_sig)
+    }
+    fn visit_field(&mut self, field: &(Ident, DataTy)) {
+        walk_field(self, field)
+    }
 }
 
 macro_rules! walk_list {
@@ -547,6 +613,7 @@ pub fn walk_fun_def<V: Visit>(visitor: &mut V, fun_def: &FunDef) {
     visitor.visit_block(body)
 }
 
+#[allow(unused)]
 pub fn walk_fun_decl<V: Visit>(visitor: &mut V, fun_decl: &FunDecl) {
     let FunDecl {
         ident: _,

@@ -75,7 +75,7 @@ pub(super) struct ConstrainMap {
     pub nat_unifier: HashMap<Box<str>, Nat>,
     pub mem_unifier: HashMap<Box<str>, Memory>,
     pub prv_unifier: HashMap<Box<str>, Provenance>,
-    pub exec_unifier: HashMap<Box<str>, ExecExpr>,
+    pub _exec_unifier: HashMap<Box<str>, ExecExpr>,
 }
 
 impl ConstrainMap {
@@ -85,7 +85,7 @@ impl ConstrainMap {
             nat_unifier: HashMap::new(),
             mem_unifier: HashMap::new(),
             prv_unifier: HashMap::new(),
-            exec_unifier: HashMap::new(),
+            _exec_unifier: HashMap::new(),
         }
     }
 }
