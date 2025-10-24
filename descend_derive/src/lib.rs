@@ -149,19 +149,37 @@ pub fn span_derive(attr: TokenStream, input: TokenStream) -> TokenStream {
     TokenStream::from(output)
 }
 
-/// Proc macro to automatically generate tests for all .desc files in examples/core/
+/// Proc macro to automatically generate tests for all .desc files in a specified folder
+/// Usage: generate_desc_tests!(folder_path, should_panic)
+/// Example: generate_desc_tests!("examples/core", false)
+/// Example: generate_desc_tests!("examples/error-examples", true)
 #[proc_macro]
-pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
-    // Use include_dir! as a fallback for compile-time file inclusion
-    // This ensures the files are available even if the directory structure changes
-    let dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/../examples/core");
+pub fn generate_desc_tests(input: TokenStream) -> TokenStream {
+    let input_str = input.to_string();
+    let parts: Vec<&str> = input_str.split(',').map(|s| s.trim()).collect();
+
+    if parts.len() != 2 {
+        panic!(
+            "generate_desc_tests! macro expects exactly 2 parameters: folder_path and should_panic"
+        );
+    }
+
+    let folder_path = parts[0].trim_matches('"');
+    let should_panic = parts[1].trim() == "true";
+
+    // Since include_dir! doesn't support dynamic paths, we need to handle specific folders
+    let dir = match folder_path {
+        "examples/core" => include_dir::include_dir!("$CARGO_MANIFEST_DIR/../examples/core"),
+        "examples/error-examples" => include_dir::include_dir!("$CARGO_MANIFEST_DIR/../examples/error-examples"),
+        _ => panic!("Unsupported folder path: {}. Currently supported: examples/core, examples/error-examples", folder_path),
+    };
 
     let mut test_functions = Vec::new();
 
     for file in dir.files() {
         if let Some(extension) = file.path().extension() {
             if extension == "desc" {
-                let file_name = file
+                let file_stem = file
                     .path()
                     .file_stem()
                     .and_then(|s| s.to_str())
@@ -169,7 +187,8 @@ pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
 
                 // Use the original file path from the filesystem, not the embedded path
                 let full_path = format!(
-                    "examples/core/{}",
+                    "{}/{}",
+                    folder_path,
                     file.path()
                         .file_name()
                         .and_then(|s| s.to_str())
@@ -177,7 +196,7 @@ pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
                 );
 
                 // Convert file name to valid Rust identifier
-                let test_name = file_name.replace("-", "_").replace(".", "_");
+                let test_name = file_stem.replace("-", "_").replace(".", "_");
 
                 // Handle Rust keywords and match existing snapshot names
                 let test_name = match test_name.as_str() {
@@ -206,14 +225,24 @@ pub fn generate_desc_tests(_input: TokenStream) -> TokenStream {
                 let test_name_ident = Ident::new(&test_name, proc_macro2::Span::call_site());
                 let file_path_lit = proc_macro2::Literal::string(&full_path);
 
-                test_functions.push(quote! {
-                    #[test]
-                    fn #test_name_ident() -> Result<(), descend::error::ErrorReported> {
-                        let output = descend::compile(#file_path_lit)?.0;
-                        insta::assert_snapshot!(output);
-                        Ok(())
-                    }
-                });
+                if should_panic {
+                    test_functions.push(quote! {
+                        #[test]
+                        #[should_panic]
+                        fn #test_name_ident() {
+                            descend::compile(#file_path_lit).unwrap();
+                        }
+                    });
+                } else {
+                    test_functions.push(quote! {
+                        #[test]
+                        fn #test_name_ident() -> Result<(), descend::error::ErrorReported> {
+                            let output = descend::compile(#file_path_lit)?.0;
+                            insta::assert_snapshot!(output);
+                            Ok(())
+                        }
+                    });
+                }
             }
         }
     }

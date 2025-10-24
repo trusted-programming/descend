@@ -4,7 +4,6 @@ use super::super::error::MlirError;
 use super::context::MlirContext;
 use super::expr::build_expr;
 use crate::ast as desc;
-use crate::ast::{DataTyKind, Ownership};
 
 /// Build a place expression (variable lookup)
 pub fn build_place_expr<'ctx, 'a, 'b>(
@@ -57,20 +56,6 @@ where
     'ctx: 'a,
 {
     use desc::PlaceExprKind;
-
-    // Check if we're assigning to a reference - if so, it must be unique
-    if let Some(ty) = &place_expr.ty {
-        if let desc::TyKind::Data(data_ty) = &ty.ty {
-            if let DataTyKind::Ref(ref_dty) = &data_ty.dty {
-                if ref_dty.own != Ownership::Uniq {
-                    return Err(MlirError::General(format!(
-                        "Assignment to non-unique reference is not allowed. Expected unique reference, found {:?}",
-                        ref_dty.own
-                    )));
-                }
-            }
-        }
-    }
 
     // Evaluate the right-hand side value
     let value = build_expr(value_expr, ctx)?

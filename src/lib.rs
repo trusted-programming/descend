@@ -8,7 +8,6 @@ pub mod error;
 pub mod parser;
 pub mod ty_check;
 
-
 pub fn compile(file_path: &str) -> Result<(String, String), ErrorReported> {
     let source = parser::SourceCode::from_file(file_path)?;
     let mut compil_unit = parser::parse(&source)?;
@@ -16,10 +15,10 @@ pub fn compile(file_path: &str) -> Result<(String, String), ErrorReported> {
     ty_check::ty_check(&mut compil_unit)?;
 
     let code_string = codegen::mlir::gen_checked(&compil_unit, false).map_err(|e| {
-            eprintln!("MLIR verification failed: {}", e);
-            ErrorReported
-        })?;
-    
+        eprintln!("MLIR verification failed: {}", e);
+        ErrorReported
+    })?;
+
     let ast_string = format!("{:#?}", compil_unit.items);
 
     Ok((code_string, ast_string))

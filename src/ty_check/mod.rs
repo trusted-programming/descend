@@ -52,8 +52,9 @@ pub fn ty_check(compil_unit: &mut CompilUnit) -> Result<(), ErrorReported> {
         } else {
             gl_ctx.push_fun_checked_under_nats(main_fun, Box::from(vec![]));
         }
+    } else {
+        panic!("Main function not found");
     }
-    // Main function is optional - compilation succeeds whether it exists or not
     Ok(())
 }
 
