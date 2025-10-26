@@ -6,27 +6,27 @@ fn main() -[t: cpu.thread]-> () <'a>{
 fn softmax<n: nat, r: prv>(
     h_input: &r uniq cpu.mem [f32; n]
 ) -[t: cpu.thread]-> () <'a> {
-    let mut gpu = gpu_device(0);
+    let mut npu = npu_device(0);
     
-    // Copy input to GPU
-    let mut input = gpu_alloc_copy(&uniq gpu, &shrd *h_input);
+    // Copy input to NPU
+    let mut input = npu_alloc_copy(&uniq npu, &shrd *h_input);
     
 
     // TODO: Step 1: Find maximum value for numerical stability
-    // let max = gpu_max::<<<X<64>, X<1024>>>>(&uniq input);
+    // let max = npu_max::<<<X<64>, X<1024>>>>(&uniq input);
     // Use shared memory to load data, threads compare and reduce values in parallel,
     // keeping the maximum via iterative max operations.
     
 
     // Step 2: Compute exp(x - max) for each element
     // FIXME: Use parallel reduction with shared memory, compute exp values per thread, and sum via reduction
-    gpu_exp_max::<<<X<64>, X<1024>>>>(&uniq input, max);
+    npu_exp_max::<<<X<64>, X<1024>>>>(&uniq input, max);
     
-    // TODO: Step 3: Compute sum of exp values on GPU
+    // TODO: Step 3: Compute sum of exp values on NPU
     // Use parallel reduction with shared memory, compute exp values per thread, and sum via reduction
 
     // Step 4: Normalize by dividing each element by the sum
-    gpu_normalize::<<<X<64>, X<1024>>>>(&uniq input, exp_sum);
+    npu_normalize::<<<X<64>, X<1024>>>>(&uniq input, exp_sum);
     
     // Copy final result back to host
     copy_to_host(&shrd input, h_input)
@@ -34,10 +34,10 @@ fn softmax<n: nat, r: prv>(
 
 
 
-fn gpu_exp_max<n: nat, r: prv>(
-    input: &r uniq gpu.global [f32; n],
+fn npu_exp_max<n: nat, r: prv>(
+    input: &r uniq npu.global [f32; n],
     max: f32
-) -[grid: gpu.grid<X<64>, X<1024>>]-> () {
+) -[grid: npu.grid<X<64>, X<1024>>]-> () {
     sched block in grid {
         sched thread in block {
             let elem = &uniq (*input).to_view.grp::<1024>[[block]][[thread]];
@@ -46,10 +46,10 @@ fn gpu_exp_max<n: nat, r: prv>(
     }
 }
 
-fn gpu_normalize<n: nat, r: prv>(
-    input: &r uniq gpu.global [f32; n],
+fn npu_normalize<n: nat, r: prv>(
+    input: &r uniq npu.global [f32; n],
     sum: f32
-) -[grid: gpu.grid<X<64>, X<1024>>]-> () {
+) -[grid: npu.grid<X<64>, X<1024>>]-> () {
     sched block in grid {
         sched thread in block {
             let elem = &uniq (*input).to_view.grp::<1024>[[block]][[thread]];

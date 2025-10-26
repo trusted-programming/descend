@@ -1,0 +1,10 @@
+// This file intentionally contains invalid syntax to trigger a FileIOError
+// when the compiler tries to read it. This demonstrates how FileIOError
+// is used when files cannot be read due to I/O issues.
+
+fn main() -[t: cpu.thread]-> () <'a> {
+    // This is intentionally malformed syntax
+    let x = 
+    // Missing semicolon and incomplete expression
+    return 42
+}

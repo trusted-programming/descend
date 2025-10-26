@@ -1,15 +1,14 @@
 use crate::ast::{
-    AtomicTy, BaseExec, DataTy, DataTyKind, FunDef, Memory, Nat, NatCtx, Ownership, ScalarTy, Ty,
-    TyKind,
+    AtomicTy, BaseExec, DataTy, DataTyKind, FunDef, Memory, Nat, NatCtx, ScalarTy, Ty, TyKind,
 };
 use melior::{
+    Context,
     dialect::func,
     ir::{
+        Identifier, Location, Operation, Region, Type,
         attribute::{Attribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType, MemRefType, TupleType},
-        Identifier, Location, Operation, Region, Type,
     },
-    Context,
 };
 pub trait ToMlir {
     type Output<'c>;
@@ -17,14 +16,12 @@ pub trait ToMlir {
 }
 
 impl Nat {
-    fn to_dimension_i64(self: &Self) -> i64 {
+    fn to_dimension(self: &Self) -> Vec<i64> {
         // Try to evaluate the Nat with an empty context
         let nat_ctx = NatCtx::new();
         match self.eval(&nat_ctx) {
-            Ok(size) => size as i64,
-            Err(_) => panic!(
-                "Array dimensions must be compile-time known. Dynamic arrays are not supported."
-            ),
+            Ok(size) => vec![size as i64],
+            Err(_) => vec![],
         }
     }
 }
@@ -43,7 +40,7 @@ impl ToMlir for ScalarTy {
             ScalarTy::F32 => Type::float32(context),
             ScalarTy::F64 => Type::float64(context),
             ScalarTy::Bool => IntegerType::new(context, 1).into(),
-            ScalarTy::Gpu => IntegerType::new(context, 32).into(), // this will be ignored in the MLIR backend
+            ScalarTy::Npu => IntegerType::new(context, 32).into(), // this will be ignored in the MLIR backend
         }
     }
 }
@@ -80,25 +77,11 @@ impl ToMlir for crate::ast::Ident {
     }
 }
 
-/// Helper function to map BinOp to HIVM operation names
-fn binop_to_hivm_operation(binop: &crate::ast::BinOp) -> &'static str {
-    match binop {
-        crate::ast::BinOp::Add => "hivm.hir.vadd",
-        crate::ast::BinOp::Sub => unimplemented!("HIVM dialect does not have vsub operation - subtraction not supported in HIVM vector operations"),
-        crate::ast::BinOp::Mul => "hivm.hir.vmul",
-        crate::ast::BinOp::Div => "hivm.hir.vdiv",
-        crate::ast::BinOp::Mod => "hivm.hir.vmod",
-        // For now, only support arithmetic operations
-        // Other operations (comparisons, logical, bitwise) can be added later
-        _ => unimplemented!("HIVM operation for {:?} not yet implemented", binop),
-    }
-}
-
 /// Helper function to apply HIVM address space to a memref type string
 fn apply_hivm_address_space(base_str: String, mem: &Memory) -> String {
     if base_str.starts_with("memref<") {
         match mem {
-            Memory::GpuGlobal | Memory::GpuShared => {
+            Memory::NpuGm => {
                 // Use replace_range for better performance than replacen
                 let mut result = base_str;
                 if let Some(pos) = result.rfind('>') {
@@ -106,7 +89,7 @@ fn apply_hivm_address_space(base_str: String, mem: &Memory) -> String {
                 }
                 result
             }
-            Memory::GpuLocal => {
+            Memory::NpuUb => {
                 let mut result = base_str;
                 if let Some(pos) = result.rfind('>') {
                     result.insert_str(pos, ", #hivm.address_space<ub>");
@@ -149,8 +132,8 @@ fn ref_array_to_mlir<'c>(
 ) -> Type<'c> {
     // Array reference -> memref with dimensions
     let elem_type = elem_ty.to_mlir(context);
-    let dim = size.to_dimension_i64();
-    let base_type: Type<'c> = MemRefType::new(elem_type, &[dim], None, None).into();
+    let dim = size.to_dimension();
+    let base_type: Type<'c> = MemRefType::new(elem_type, &dim, None, None).into();
 
     // Add HIVM address space if needed
     let base_str = base_type.to_string();
@@ -169,8 +152,8 @@ fn ref_at_to_mlir<'c>(inner: &DataTy, mem: &Memory, context: &'c Context) -> Typ
         }
         DataTyKind::Array(elem_ty, size) | DataTyKind::ArrayShape(elem_ty, size) => {
             let elem_type = elem_ty.to_mlir(context);
-            let dim = size.to_dimension_i64();
-            MemRefType::new(elem_type, &[dim], None, None).into()
+            let dim = size.to_dimension();
+            MemRefType::new(elem_type, &dim, None, None).into()
         }
         DataTyKind::Tuple(_) => {
             unimplemented!("Tuple references with At not yet supported in MLIR conversion")
@@ -210,7 +193,7 @@ fn get_mlir_type_string_with_address_space(ty: &Ty, context: &Context) -> String
     let base_type = ty.to_mlir(context);
     let base_str = base_type.to_string();
 
-    // Check if this is a DataTy with At type or Ref type with GPU memory
+    // Check if this is a DataTy with At type or Ref type with NPU memory
     match &ty.ty {
         TyKind::Data(data_ty) => match &data_ty.dty {
             DataTyKind::At(_, mem) => apply_hivm_address_space(base_str, mem),
@@ -239,19 +222,19 @@ impl ToMlir for DataTy {
             DataTyKind::Ident(ident) => ident.to_mlir(context),
             DataTyKind::Array(elem_ty, size) => {
                 let elem_type = elem_ty.to_mlir(context);
-                let dim = size.to_dimension_i64();
-                MemRefType::new(elem_type, &[dim], None, None).into()
+                let dim = size.to_dimension();
+                MemRefType::new(elem_type, &dim, None, None).into()
             }
             DataTyKind::ArrayShape(elem_ty, size) => {
                 let elem_type = elem_ty.to_mlir(context);
-                let dim = size.to_dimension_i64();
-                MemRefType::new(elem_type, &[dim], None, None).into()
+                let dim = size.to_dimension();
+                MemRefType::new(elem_type, &dim, None, None).into()
             }
             DataTyKind::Struct(_) => {
                 unimplemented!("Struct types not yet supported in MLIR conversion")
             }
             DataTyKind::At(inner, mem) => {
-                // Lower inner type and, if it is a memref, attach HIVM address space for gpu.global
+                // Lower inner type and, if it is a memref, attach HIVM address space for npu.global
                 let base_type = inner.to_mlir(context);
                 let base_str = base_type.to_string();
                 let final_str = apply_hivm_address_space(base_str, mem);
@@ -350,10 +333,10 @@ impl ToMlir for FunDef {
 
         // Create attributes based on execution type
         let attributes: Vec<(Identifier, Attribute)> =
-            if matches!(self.exec.exec.base, BaseExec::GpuGrid(_, _)) {
-                // For GPU functions, we need to create HACC attributes
+            if matches!(self.exec.exec.base, BaseExec::NpuGrid(_, _)) {
+                // For NPU functions, we need to create HACC attributes
                 // Since we can't easily create HACC dialect attributes here, we'll use empty attributes
-                // The actual GPU attributes will be handled in the string-based generation path
+                // The actual NPU attributes will be handled in the string-based generation path
                 vec![]
             } else {
                 // For CPU functions, no special attributes needed
@@ -371,419 +354,7 @@ impl ToMlir for FunDef {
     }
 }
 
-/// Parameter usage information
-#[derive(Debug, Clone, PartialEq)]
-struct ParameterUsage {
-    pub read: bool,
-    pub write: bool,
-}
-
-impl ParameterUsage {
-    fn new() -> Self {
-        Self {
-            read: false,
-            write: false,
-        }
-    }
-
-    fn mark_read(&mut self) {
-        self.read = true;
-    }
-
-    fn mark_write(&mut self) {
-        self.write = true;
-    }
-
-    fn needs_ub_allocation(&self) -> bool {
-        // Only allocate ub memory if the parameter is read from
-        // (parameters that are only written to can write directly to global memory)
-        self.read
-    }
-}
-
-/// Collect which parameters are referenced in the function body and how they are used
-fn collect_parameter_usage(
-    fun: &crate::ast::FunDef,
-) -> std::collections::HashMap<String, ParameterUsage> {
-    use crate::ast::{Expr, ExprKind, PlaceExprKind};
-    use std::collections::HashMap;
-
-    let mut param_usage = HashMap::new();
-
-    fn walk_expr(expr: &Expr, param_usage: &mut HashMap<String, ParameterUsage>) {
-        match &expr.expr {
-            ExprKind::PlaceExpr(place_expr) => {
-                // This is a read operation
-                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    param_usage
-                        .entry(ident.name.to_string())
-                        .or_insert_with(ParameterUsage::new)
-                        .mark_read();
-                }
-            }
-            ExprKind::BinOp(_, lhs, rhs) => {
-                walk_expr(lhs, param_usage);
-                walk_expr(rhs, param_usage);
-            }
-            ExprKind::Let(_, _, value_expr) => {
-                walk_expr(value_expr, param_usage);
-            }
-            ExprKind::Seq(exprs) => {
-                for expr in exprs {
-                    walk_expr(expr, param_usage);
-                }
-            }
-            ExprKind::Assign(place_expr, value_expr) => {
-                // This is a write operation
-                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    param_usage
-                        .entry(ident.name.to_string())
-                        .or_insert_with(ParameterUsage::new)
-                        .mark_write();
-                }
-                walk_expr(value_expr, param_usage);
-            }
-            ExprKind::IdxAssign(place_expr, _, value_expr) => {
-                // This is a write operation
-                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    param_usage
-                        .entry(ident.name.to_string())
-                        .or_insert_with(ParameterUsage::new)
-                        .mark_write();
-                }
-                walk_expr(value_expr, param_usage);
-            }
-            ExprKind::App(_, _, args) => {
-                for arg in args {
-                    walk_expr(arg, param_usage);
-                }
-            }
-            ExprKind::IfElse(cond, case_true, case_false) => {
-                walk_expr(cond, param_usage);
-                walk_expr(case_true, param_usage);
-                walk_expr(case_false, param_usage);
-            }
-            ExprKind::If(cond, case_true) => {
-                walk_expr(cond, param_usage);
-                walk_expr(case_true, param_usage);
-            }
-            ExprKind::ForNat(_, _, body) => {
-                walk_expr(body, param_usage);
-            }
-            ExprKind::Ref(_, _, place_expr) => {
-                // Taking a reference is a read operation
-                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    param_usage
-                        .entry(ident.name.to_string())
-                        .or_insert_with(ParameterUsage::new)
-                        .mark_read();
-                }
-            }
-            ExprKind::Unsafe(expr) => {
-                walk_expr(expr, param_usage);
-            }
-            _ => {
-                // Other expression types don't contain variable references
-            }
-        }
-    }
-
-    walk_expr(&fun.body.body, &mut param_usage);
-    param_usage
-}
-
-/// Generate body operations for GPU functions
-fn generate_body_operations(
-    fun: &crate::ast::FunDef,
-    param_to_local: &std::collections::HashMap<String, String>,
-    alloc_counter: &mut usize,
-    context: &Context,
-) -> String {
-    use crate::ast::{DataTyKind, Expr, ExprKind, Memory, PlaceExprKind, TyKind};
-
-    let mut body_ops = String::new();
-
-    fn walk_expr(
-        expr: &Expr,
-        fun: &crate::ast::FunDef,
-        param_to_local: &std::collections::HashMap<String, String>,
-        alloc_counter: &mut usize,
-        context: &Context,
-        body_ops: &mut String,
-    ) -> Option<String> {
-        match &expr.expr {
-            ExprKind::BinOp(binop, lhs, rhs) => {
-                // Process left and right operands
-                let lhs_var =
-                    walk_expr(lhs, fun, param_to_local, alloc_counter, context, body_ops)?;
-                let rhs_var =
-                    walk_expr(rhs, fun, param_to_local, alloc_counter, context, body_ops)?;
-
-                // Generate output allocation
-                let output_alloc = if *alloc_counter == 0 {
-                    "%alloc".to_string()
-                } else {
-                    format!("%alloc_{}", *alloc_counter - 1)
-                };
-                *alloc_counter += 1;
-
-                // Determine the type for allocation (use the type of lhs as reference)
-                let lhs_type = match &lhs.expr {
-                    ExprKind::PlaceExpr(place_expr) => {
-                        if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                            // Find the parameter declaration to get its type
-                            if let Some(param_decl) =
-                                fun.param_decls.iter().find(|p| p.ident.name == ident.name)
-                            {
-                                if let Some(param_ty) = &param_decl.ty {
-                                    // Convert the parameter type to ub address space
-                                    match &param_ty.ty {
-                                        TyKind::Data(data_ty) => match &data_ty.dty {
-                                            DataTyKind::At(inner, _) => {
-                                                let base_type = inner.to_mlir(context);
-                                                let base_str = base_type.to_string();
-                                                apply_hivm_address_space(
-                                                    base_str,
-                                                    &Memory::GpuLocal,
-                                                )
-                                            }
-                                            DataTyKind::Ref(ref_dty) => {
-                                                let base_type = ref_dty.dty.to_mlir(context);
-                                                let base_str = base_type.to_string();
-                                                apply_hivm_address_space(
-                                                    base_str,
-                                                    &Memory::GpuLocal,
-                                                )
-                                            }
-                                            _ => get_mlir_type_string_with_address_space(
-                                                param_ty, context,
-                                            ),
-                                        },
-                                        _ => get_mlir_type_string_with_address_space(
-                                            param_ty, context,
-                                        ),
-                                    }
-                                } else {
-                                    return None;
-                                }
-                            } else {
-                                return None;
-                            }
-                        } else {
-                            return None;
-                        }
-                    }
-                    _ => return None,
-                };
-
-                // Generate allocation
-                body_ops.push_str(&format!(
-                    "    {} = memref.alloc() : {}\n",
-                    output_alloc, lhs_type
-                ));
-
-                // Generate HIVM operation
-                let hivm_op = binop_to_hivm_operation(binop);
-                body_ops.push_str(&format!(
-                    "    {} ins({}, {} : {}, {}) outs({} : {})\n",
-                    hivm_op, lhs_var, rhs_var, lhs_type, lhs_type, output_alloc, lhs_type
-                ));
-
-                Some(output_alloc)
-            }
-            ExprKind::PlaceExpr(place_expr) => {
-                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    // Return the local variable name for this parameter
-                    param_to_local.get(&ident.name.to_string()).cloned()
-                } else {
-                    None
-                }
-            }
-            ExprKind::Assign(place_expr, value_expr) => {
-                // Handle assignment: b = a
-                // First, evaluate the right-hand side (value expression)
-                let value_var = walk_expr(
-                    value_expr,
-                    fun,
-                    param_to_local,
-                    alloc_counter,
-                    context,
-                    body_ops,
-                )?;
-
-                // Find the target parameter for the assignment
-                if let PlaceExprKind::Ident(ident) = &place_expr.pl_expr {
-                    // Find the parameter declaration to get its type and index
-                    if let Some((param_idx, param_decl)) = fun
-                        .param_decls
-                        .iter()
-                        .enumerate()
-                        .find(|(_, p)| p.ident.name == ident.name)
-                    {
-                        if let Some(param_ty) = &param_decl.ty {
-                            // Check if we're assigning to a reference - if so, it must be unique
-                            if let TyKind::Data(data_ty) = &param_ty.ty {
-                                if let DataTyKind::Ref(ref_dty) = &data_ty.dty {
-                                    if ref_dty.own != Ownership::Uniq {
-                                        panic!(
-                                            "Assignment to non-unique reference is not allowed. Expected unique reference, found {:?}",
-                                            ref_dty.own
-                                        );
-                                    }
-                                }
-                            }
-
-                            // Generate the target parameter type (should be gm address space)
-                            let target_type =
-                                get_mlir_type_string_with_address_space(param_ty, context);
-
-                            // Generate the source type (should be ub address space for local allocations)
-                            let source_type = match &param_ty.ty {
-                                TyKind::Data(data_ty) => match &data_ty.dty {
-                                    DataTyKind::At(inner, _) => {
-                                        let base_type = inner.to_mlir(context);
-                                        let base_str = base_type.to_string();
-                                        apply_hivm_address_space(base_str, &Memory::GpuLocal)
-                                    }
-                                    DataTyKind::Ref(ref_dty) => {
-                                        let base_type = ref_dty.dty.to_mlir(context);
-                                        let base_str = base_type.to_string();
-                                        apply_hivm_address_space(base_str, &Memory::GpuLocal)
-                                    }
-                                    _ => get_mlir_type_string_with_address_space(param_ty, context),
-                                },
-                                _ => get_mlir_type_string_with_address_space(param_ty, context),
-                            };
-
-                            // Generate store operation: hivm.hir.store ins(value) outs(%argN)
-                            body_ops.push_str(&format!(
-                                "    hivm.hir.store ins({} : {}) outs(%arg{} : {})\n",
-                                value_var, source_type, param_idx, target_type
-                            ));
-                        }
-                    }
-                }
-
-                // Assignment doesn't produce a value
-                None
-            }
-            ExprKind::Seq(exprs) => {
-                // Process sequence expressions, return the result of the last expression
-                let mut last_result = None;
-                for expr in exprs {
-                    last_result =
-                        walk_expr(expr, fun, param_to_local, alloc_counter, context, body_ops);
-                }
-                last_result
-            }
-            ExprKind::Lit(_) => {
-                // Literals don't produce SSA values in this context
-                None
-            }
-            _ => {
-                // Other expression types not yet supported
-                None
-            }
-        }
-    }
-
-    walk_expr(
-        &fun.body.body,
-        fun,
-        param_to_local,
-        alloc_counter,
-        context,
-        &mut body_ops,
-    );
-    body_ops
-}
-
-/// Generate load operations for GPU parameters
-/// Returns (operations_string, param_to_local_map, final_alloc_counter)
-fn generate_load_operations(
-    fun: &crate::ast::FunDef,
-    param_usage: &std::collections::HashMap<String, ParameterUsage>,
-    context: &Context,
-) -> (String, std::collections::HashMap<String, String>, usize) {
-    use crate::ast::{DataTyKind, Memory, TyKind};
-    use std::collections::HashMap;
-
-    let mut load_ops = String::new();
-    let mut param_to_local = HashMap::new();
-    let mut alloc_counter = 0;
-
-    for (i, param) in fun.param_decls.iter().enumerate() {
-        let param_name = param.ident.name.to_string();
-
-        // Check if parameter is used and needs ub allocation
-        let usage = match param_usage.get(&param_name) {
-            Some(usage) => usage,
-            None => continue, // Parameter not used at all
-        };
-
-        // Only allocate ub memory if the parameter is read from
-        if !usage.needs_ub_allocation() {
-            continue;
-        }
-
-        if let Some(ty) = &param.ty {
-            if let TyKind::Data(data_ty) = &ty.ty {
-                let needs_gpu_load = match &data_ty.dty {
-                    DataTyKind::At(_, mem) => {
-                        matches!(mem, Memory::GpuGlobal | Memory::GpuShared)
-                    }
-                    DataTyKind::Ref(ref_dty) => {
-                        matches!(ref_dty.mem, Memory::GpuGlobal | Memory::GpuShared)
-                    }
-                    _ => false,
-                };
-
-                if needs_gpu_load {
-                    // Generate the original type with gm address space
-                    let gm_type = get_mlir_type_string_with_address_space(ty, context);
-
-                    // Generate the local type with ub address space
-                    let ub_type = match &data_ty.dty {
-                        DataTyKind::At(inner, _) => {
-                            let base_type = inner.to_mlir(context);
-                            let base_str = base_type.to_string();
-                            apply_hivm_address_space(base_str, &Memory::GpuLocal)
-                        }
-                        DataTyKind::Ref(ref_dty) => {
-                            let base_type = ref_dty.dty.to_mlir(context);
-                            let base_str = base_type.to_string();
-                            apply_hivm_address_space(base_str, &Memory::GpuLocal)
-                        }
-                        _ => gm_type.clone(),
-                    };
-
-                    // Generate alloc and load operations
-                    let alloc_name = if alloc_counter == 0 {
-                        "%alloc".to_string()
-                    } else {
-                        format!("%alloc_{}", alloc_counter - 1)
-                    };
-                    load_ops.push_str(&format!(
-                        "    {} = memref.alloc() : {}\n",
-                        alloc_name, ub_type
-                    ));
-                    load_ops.push_str(&format!(
-                        "    hivm.hir.load ins(%arg{} : {}) outs({} : {})\n",
-                        i, gm_type, alloc_name, ub_type
-                    ));
-
-                    // Map parameter to its local version
-                    param_to_local.insert(param_name, alloc_name);
-                    alloc_counter += 1;
-                }
-            }
-        }
-    }
-
-    (load_ops, param_to_local, alloc_counter)
-}
-
-/// Generate function with body including load operations for GPU parameters
+/// Generate function with body including load operations for NPU parameters
 fn generate_function_with_body(fun: &crate::ast::FunDef, context: &Context) -> String {
     // Pre-allocate with estimated capacity to avoid reallocations
     let estimated_capacity = 50 + fun.ident.name.len() + fun.param_decls.len() * 20;
@@ -813,8 +384,8 @@ fn generate_function_with_body(fun: &crate::ast::FunDef, context: &Context) -> S
 
     signature.push_str(")");
 
-    // Add GPU attributes if needed
-    if matches!(fun.exec.exec.base, BaseExec::GpuGrid(_, _)) {
+    // Add NPU attributes if needed
+    if matches!(fun.exec.exec.base, BaseExec::NpuGrid(_, _)) {
         // TODO: When HACC dialect is registered in the MLIR context, replace this with:
         // let hacc_attributes = create_hacc_attributes(context);
         // and use the attributes with MLIR operation builders instead of string generation
@@ -823,19 +394,6 @@ fn generate_function_with_body(fun: &crate::ast::FunDef, context: &Context) -> S
     }
 
     signature.push_str(" {\n");
-
-    // Collect parameter usage information
-    let param_usage = collect_parameter_usage(fun);
-
-    // Generate load operations for GPU parameters (only for read usage)
-    let (load_ops, param_to_local, mut alloc_counter) =
-        generate_load_operations(fun, &param_usage, context);
-    signature.push_str(&load_ops);
-
-    // Generate body operations (binary operations, etc.)
-    let body_ops = generate_body_operations(fun, &param_to_local, &mut alloc_counter, context);
-    signature.push_str(&body_ops);
-
     signature.push_str("    return\n  }\n");
     signature
 }
@@ -1050,7 +608,7 @@ mod tests {
         let ref_dty = RefDty::new(
             Provenance::Ident(Ident::new("r")),
             Ownership::Shrd,
-            Memory::GpuGlobal,
+            Memory::NpuGm,
             make_data_ty(DataTyKind::Scalar(ScalarTy::F32)),
         );
         let data_ty = make_data_ty(DataTyKind::Ref(Box::new(ref_dty)));
@@ -1088,13 +646,13 @@ mod tests {
     }
 
     #[test]
-    fn test_at_array_gpu_global_adds_gm_address_space() {
+    fn test_at_array_npu_global_adds_gm_address_space() {
         let context = Context::new();
         let inner = make_data_ty(DataTyKind::Array(
             Box::new(make_data_ty(DataTyKind::Scalar(ScalarTy::I32))),
             Nat::Lit(16),
         ));
-        let data_ty = make_data_ty(DataTyKind::At(Box::new(inner), Memory::GpuGlobal));
+        let data_ty = make_data_ty(DataTyKind::At(Box::new(inner), Memory::NpuGm));
 
         // Test the type string generation (avoids HIVM dialect registration issues)
         let type_str = test_at_type_string(&data_ty, &context);
@@ -1115,15 +673,15 @@ mod tests {
         assert_eq!(type_str, "memref<16xi32>");
     }
 
-    /// Helper function to create a minimal GPU function with GpuGrid execution context
-    fn make_gpu_function() -> FunDef {
+    /// Helper function to create a minimal NPU function with NpuGrid execution context
+    fn make_npu_function() -> FunDef {
         use crate::ast::{
             Block, DataTy, DataTyKind, Dim, Dim1d, ExecExpr, ExecExprKind, Ident, ScalarTy, Span,
         };
 
         FunDef {
             ident: Ident {
-                name: "gpu_kernel".into(),
+                name: "npu_kernel".into(),
                 span: Some(Span { begin: 0, end: 10 }),
                 is_implicit: false,
             },
@@ -1133,7 +691,7 @@ mod tests {
             ret_dty: Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::Unit))),
             exec: ExecExpr {
                 exec: Box::new(ExecExprKind {
-                    base: BaseExec::GpuGrid(
+                    base: BaseExec::NpuGrid(
                         Dim::X(Box::new(Dim1d(Nat::Lit(1)))),
                         Dim::X(Box::new(Dim1d(Nat::Lit(16)))),
                     ),
@@ -1197,15 +755,18 @@ mod tests {
     }
 
     #[test]
-    fn test_gpu_function_signature_with_attributes() {
+    fn test_npu_function_signature_with_attributes() {
         let context = Context::new();
-        let gpu_fun = make_gpu_function();
-        let signature = generate_function_with_body(&gpu_fun, &context);
+        let npu_fun = make_npu_function();
+        let signature = generate_function_with_body(&npu_fun, &context);
 
-        // Check that the signature contains the GPU attributes
-        assert!(signature
-            .contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
-        assert!(signature.contains("func.func @gpu_kernel"));
+        // Check that the signature contains the NPU attributes
+        assert!(
+            signature.contains(
+                "attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"
+            )
+        );
+        assert!(signature.contains("func.func @npu_kernel"));
         assert!(signature.contains(") attributes"));
     }
 
@@ -1215,9 +776,12 @@ mod tests {
         let cpu_fun = make_cpu_function();
         let signature = generate_function_with_body(&cpu_fun, &context);
 
-        // Check that the signature does NOT contain GPU attributes
-        assert!(!signature
-            .contains("attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"));
+        // Check that the signature does NOT contain NPU attributes
+        assert!(
+            !signature.contains(
+                "attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>}"
+            )
+        );
         assert!(signature.contains("func.func @cpu_function"));
         assert!(signature.contains(") {"));
         assert!(!signature.contains(") attributes"));
@@ -1226,8 +790,8 @@ mod tests {
     #[test]
     fn test_function_signature_format() {
         let context = Context::new();
-        let gpu_fun = make_gpu_function();
-        let signature = generate_function_with_body(&gpu_fun, &context);
+        let npu_fun = make_npu_function();
+        let signature = generate_function_with_body(&npu_fun, &context);
 
         // Check that attributes appear in the correct position (after params, before brace)
         let lines: Vec<&str> = signature.lines().collect();
@@ -1236,7 +800,7 @@ mod tests {
         assert_eq!(lines.len(), 3);
 
         let func_line = lines[0]; // First line should be the function declaration
-        assert!(func_line.contains("func.func @gpu_kernel"));
+        assert!(func_line.contains("func.func @npu_kernel"));
         assert!(func_line.contains(
             ") attributes {hacc.entry, hacc.function_kind = #hacc.function_kind<DEVICE>} {"
         ));
@@ -1244,7 +808,7 @@ mod tests {
         // Verify the structure: function_name() attributes { ... } {
         let parts: Vec<&str> = func_line.split(") attributes").collect();
         assert_eq!(parts.len(), 2);
-        assert!(parts[0].contains("@gpu_kernel"));
+        assert!(parts[0].contains("@npu_kernel"));
         assert!(parts[1].starts_with(" {hacc.entry"));
     }
 }

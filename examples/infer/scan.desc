@@ -10,8 +10,8 @@ fn scan_inplace<m: nat, a: prv>(
 }
 
 // fn upsweep<a: prv>(
-//     arr_ref: &a uniq gpu.shared [i32; 64]
-// ) -[block: gpu.block<X<32>>]-> () {
+//     arr_ref: &a uniq npu.shared [i32; 64]
+// ) -[block: npu.block<X<32>>]-> () {
 //     for_nat dd in halved_range(32) {
 //         sync(block);
 // // FIXME the next line uses d:nat but group_mut is defined via d:dty, which clashes
@@ -28,16 +28,16 @@ fn scan_inplace<m: nat, a: prv>(
 // }
 //
 // fn downsweep_inplace_red_add<a: prv, dd: nat>(
-//     arr: &a uniq gpu.shared [[i32; 64/dd]]
-// ) -[gt: gpu.thread]-> () {
+//     arr: &a uniq npu.shared [[i32; 64/dd]]
+// ) -[gt: npu.thread]-> () {
 //     let t = (*arr)[32/dd-1];
 //     (*arr)[32/dd-1] = (*arr)[64/dd-1];
 //     (*arr)[64/dd-1] = (*arr)[64/dd-1] + t
 // }
 //
 // fn downsweep<a: prv>(
-//     arr_ref: &a uniq gpu.shared [i32; 64]
-// ) -[block: gpu.block<X<32>>]-> () {
+//     arr_ref: &a uniq npu.shared [i32; 64]
+// ) -[block: npu.block<X<32>>]-> () {
 //     for_nat dd in doubled_range(32) {
 //         sync(block);
 //         let tmp_down_view = &uniq (*arr_ref).to_view.grp::<64/dd>;
@@ -56,11 +56,11 @@ fn scan_inplace<m: nat, a: prv>(
 // }
 
 fn par_scan<n: nat, gs: nat, bs: nat, r1: prv, r2: prv, r3: prv, r4: prv>(
-    input: &r1 shrd gpu.global [i32; n],
-    output: &r2 uniq gpu.global [i32; n],
-    block_sums: &r3 uniq gpu.global [i32; gs],
-    tmp: &r4 uniq gpu.shared [i32; bs*2]
-) -[grid: gpu.grid<X<gs>, X<bs>>]-> () {
+    input: &r1 shrd npu.global [i32; n],
+    output: &r2 uniq npu.global [i32; n],
+    block_sums: &r3 uniq npu.global [i32; gs],
+    tmp: &r4 uniq npu.shared [i32; bs*2]
+) -[grid: npu.grid<X<gs>, X<bs>>]-> () {
     let block_group = &shrd (*input).to_view.grp::<(bs*2)>;
     let out_grp = &uniq (*output).to_view.grp::<(bs*2)>;
     // n/64 == 256
@@ -141,9 +141,9 @@ fn par_scan<n: nat, gs: nat, bs: nat, r1: prv, r2: prv, r3: prv, r4: prv>(
 }
 
 // fn par_scan2<n: nat, gs: nat, bs: nat, r1: prv, r2: prv>(
-//     input: &r1 uniq gpu.global [i32; n],
-//     block_sums: &r2 shrd gpu.global [i32; gs]
-// ) -[grid: gpu.grid<X<gs>, X<bs*2>>]-> () {
+//     input: &r1 uniq npu.global [i32; n],
+//     block_sums: &r2 shrd npu.global [i32; gs]
+// ) -[grid: npu.grid<X<gs>, X<bs*2>>]-> () {
 //     let scanned_vals = &uniq (*input).to_view.grp::<(bs*2)>;
 //     let block_sum_grps = &shrd (*block_sums).to_view.grp::<1>;
 //     sched block in grid {
@@ -157,9 +157,9 @@ fn par_scan<n: nat, gs: nat, bs: nat, r1: prv, r2: prv, r3: prv, r4: prv>(
 // }
 
 fn add<n: nat, gs: nat, bs: nat, r1: prv, r2: prv>(
-    input: &r1 uniq gpu.global [i32; n],
-    block_sums: &r2 shrd gpu.global [i32; gs]
-) -[grid: gpu.grid<X<gs>, X<1>>]-> () {
+    input: &r1 uniq npu.global [i32; n],
+    block_sums: &r2 shrd npu.global [i32; gs]
+) -[grid: npu.grid<X<gs>, X<1>>]-> () {
     sched block in grid {
         let value_grp = &shrd (*block_sums).to_view.grp::<1>[[block]];
         let chunk_grp = &uniq (*input).to_view.grp::<2*bs>[[block]];
@@ -182,17 +182,17 @@ fn scan<n: nat, gs: nat, bs: nat, a: prv, b: prv, c: prv>(
     h_output: &b uniq cpu.mem [i32; n],
     h_block_sums: &c uniq cpu.mem [i32; n/(bs*2)]
 ) -[t: cpu.thread]-> () {
-    let mut gpu = gpu_device(0);
+    let mut npu = npu_device(0);
 
-    let a_array = gpu_alloc_copy(&uniq gpu, ha_array);
-    let mut out_array = gpu_alloc_copy(&uniq gpu, &shrd *h_output);
-    let mut block_sums = gpu_alloc_copy(&uniq gpu, &shrd *h_block_sums);
+    let a_array = npu_alloc_copy(&uniq npu, ha_array);
+    let mut out_array = npu_alloc_copy(&uniq npu, &shrd *h_output);
+    let mut block_sums = npu_alloc_copy(&uniq npu, &shrd *h_block_sums);
 
     par_scan::<<<X<gs>, X<bs>; [i32; (bs*2)]>>>::<n, gs, bs>(&shrd a_array, &uniq out_array, &uniq block_sums);
 
     copy_to_host(&shrd block_sums, &uniq *h_block_sums);
     scan_inplace::<gs>(&uniq *h_block_sums);
-    copy_to_gpu(&uniq block_sums, &shrd *h_block_sums);
+    copy_to_npu(&uniq block_sums, &shrd *h_block_sums);
 
     // par_scan2::<<<X<gs>, X<bs*2>>>>::<n, gs, bs>(&uniq out_array, &shrd block_sums);
     add::<<<X<n/(2*bs)>, X<1>>>>::<n, (n/(2*bs)), bs>(&uniq out_array, &shrd block_sums);

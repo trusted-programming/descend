@@ -1,6 +1,6 @@
 mod borrow_check;
 mod ctxs;
-mod error;
+pub mod error;
 mod exec;
 mod infer_kinded_args;
 mod pl_expr;
@@ -12,7 +12,7 @@ use self::pl_expr::PlExprTyCtx;
 use crate::ast::internal::{Frame, IdentTyped, Loan, Place, PrvMapping};
 use crate::ast::utils;
 use crate::ast::*;
-use crate::error::ErrorReported;
+use crate::ty_check::error::TyError;
 use ctxs::{AccessCtx, GlobalCtx, KindCtx, TyCtx};
 use error::*;
 use std::collections::HashSet;
@@ -36,7 +36,7 @@ pub(crate) use matches_dty;
 // ∀ε ∈ Σ. Σ ⊢ ε
 // --------------
 //      ⊢ Σ
-pub fn ty_check(compil_unit: &mut CompilUnit) -> Result<(), ErrorReported> {
+pub fn ty_check(compil_unit: &mut CompilUnit) -> Result<(), TyError> {
     let mut gl_ctx = GlobalCtx::new(
         compil_unit,
         pre_decl::fun_decls()
@@ -46,14 +46,11 @@ pub fn ty_check(compil_unit: &mut CompilUnit) -> Result<(), ErrorReported> {
     );
     let mut nat_ctx = NatCtx::new();
     if let Some(mut main_fun) = gl_ctx.pop_fun_def("main") {
-        if let Err(err) = ty_check_global_fun_def(&mut gl_ctx, &mut nat_ctx, &mut main_fun) {
-            err.emit(compil_unit.source);
-            return Err(ErrorReported);
-        } else {
-            gl_ctx.push_fun_checked_under_nats(main_fun, Box::from(vec![]));
-        }
+        ty_check_global_fun_def(&mut gl_ctx, &mut nat_ctx, &mut main_fun)?;
+        gl_ctx.push_fun_checked_under_nats(main_fun, Box::from(vec![]));
+    } else {
+        return Err(TyError::MissingMain);
     }
-    // Main function is optional - compilation succeeds whether it exists or not
     Ok(())
 }
 
@@ -233,7 +230,7 @@ fn ty_check_hole(ctx: &ExprTyCtx) -> TyResult<Ty> {
             DataTyKind::Ident(Ident::new_impli(&utils::fresh_name("hole"))),
         )))))
     } else {
-        Err(TyError::UnsafeRequired)
+        Err(TyError::UnsafeRequired(Expr::new(ExprKind::Hole)))
     }
 }
 
@@ -277,14 +274,14 @@ fn syncable_under_exec(synced: &ExecExpr, under: &ExecExpr) -> TyResult<()> {
 
 fn syncable_exec_ty(exec_ty: &ExecTy) -> bool {
     match &exec_ty.ty {
-        ExecTyKind::GpuBlock(_) | ExecTyKind::GpuWarp => true,
+        ExecTyKind::NpuBlock(_) | ExecTyKind::NpuWarp => true,
         ExecTyKind::CpuThread
-        | ExecTyKind::GpuGrid(_, _)
-        | ExecTyKind::GpuToThreads(_, _)
-        | ExecTyKind::GpuBlockGrp(_, _)
-        | ExecTyKind::GpuThreadGrp(_)
-        | ExecTyKind::GpuWarpGrp(_)
-        | ExecTyKind::GpuThread
+        | ExecTyKind::NpuGrid(_, _)
+        | ExecTyKind::NpuToThreads(_, _)
+        | ExecTyKind::NpuBlockGrp(_, _)
+        | ExecTyKind::NpuThreadGrp(_)
+        | ExecTyKind::NpuWarpGrp(_)
+        | ExecTyKind::NpuThread
         | ExecTyKind::Any => false,
     }
 }
@@ -325,7 +322,9 @@ fn ty_check_for_nat(
                 ));
             }
         } else {
-            return Err(TyError::UnexpectedType);
+            return Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(
+                DataTy::new(DataTyKind::Scalar(ScalarTy::I32)),
+            )))));
         }
     }
     Ok(Ty::new(TyKind::Data(Box::new(DataTy::new(
@@ -351,7 +350,7 @@ fn ty_check_for(
 
     let ident_dty = match &collec_dty.dty {
         // TODO
-        DataTyKind::Array(elem_dty, n) => unimplemented!(),
+        DataTyKind::Array(_elem_dty, _n) => unimplemented!(),
         DataTyKind::Ref(reff) => match &reff.dty.as_ref().dty {
             DataTyKind::Array(elem_dty, _) => DataTyKind::Ref(Box::new(RefDty::new(
                 reff.rgn.clone(),
@@ -369,7 +368,7 @@ fn ty_check_for(
                 return Err(TyError::String(format!(
                     "Expected reference to array data type, but found {:?}",
                     reff.dty.as_ref(),
-                )))
+                )));
             }
         },
         // DataTyKind::Range => DataTyKind::Scalar(ScalarTy::I32),
@@ -671,6 +670,7 @@ fn ty_check_block(ctx: &mut ExprTyCtx, block: &mut Block) -> TyResult<Ty> {
     Ok(block.body.ty.as_ref().unwrap().as_ref().clone())
 }
 
+#[allow(unused)]
 fn collect_valid_loans(ty_ctx: &TyCtx, mut loans: HashSet<Loan>) -> HashSet<Loan> {
     // FIXME this implementations assumes unique names which is not the case
     loans.retain(|l| {
@@ -719,12 +719,14 @@ fn ty_check_assign_place(
     let e_dty = if let TyKind::Data(dty) = &mut e.ty.as_mut().unwrap().as_mut().ty {
         dty.as_mut()
     } else {
-        return Err(TyError::UnexpectedType);
+        return Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(
+            DataTy::new(DataTyKind::Scalar(ScalarTy::I32)),
+        )))));
     };
     let err = unify::sub_unify(ctx.kind_ctx, ctx.ty_ctx, e_dty, &mut place_ty);
     if let Err(err) = err {
         return Err(match err {
-            UnifyError::CannotUnify => {
+            UnifyError::CannotUnify { .. } => {
                 TyError::MismatchedDataTypes(place_ty.clone(), e_dty.clone(), e.clone())
             }
             err => TyError::from(err),
@@ -797,10 +799,10 @@ fn ty_check_idx_assign(
         ));
     };
     let (n, own, mem, dty) = match &pl_expr_dty.dty {
-        DataTyKind::Array(elem_dty, n) => unimplemented!(), //(Ty::Data(*elem_ty), n),
-        DataTyKind::At(arr_dty, mem) => {
+        DataTyKind::Array(_elem_dty, _n) => unimplemented!(), //(Ty::Data(*elem_ty), n),
+        DataTyKind::At(arr_dty, _mem) => {
             if let DataTy {
-                dty: DataTyKind::Array(elem_dty, n),
+                dty: DataTyKind::Array(_elem_dty, _n),
                 ..
             } = arr_dty.as_ref()
             {
@@ -817,17 +819,21 @@ fn ty_check_idx_assign(
             DataTyKind::ArrayShape(sdty, n) if matches!(&sdty.dty, DataTyKind::Scalar(_)) => {
                 (n, reff.own, &reff.mem, sdty.as_ref())
             }
-            DataTyKind::ArrayShape(_, _) => return Err(TyError::AssignToView),
+            DataTyKind::ArrayShape(_, _) => {
+                return Err(TyError::AssignToView(PlaceExpr::new(PlaceExprKind::Ident(
+                    Ident::new("array_view"),
+                ))));
+            }
             _ => {
                 return Err(TyError::String(
                     "Expected a reference to array view.".to_string(),
-                ))
+                ));
             }
         },
         _ => {
             return Err(TyError::String(
                 "Trying to index into non array type.".to_string(),
-            ))
+            ));
         }
     };
     if !dty.is_fully_alive() {
@@ -895,15 +901,13 @@ fn ty_check_binary_op(
     };
     match bin_op {
         // Shift operators only allow integer values (lhs_ty and rhs_ty can differ!)
-        BinOp::Shl
-        | BinOp::Shr => match (&lhs_ty.ty, &rhs_ty.ty) {
+        BinOp::Shl | BinOp::Shr => match (&lhs_ty.ty, &rhs_ty.ty) {
             (TyKind::Data(dty1), TyKind::Data(dty2)) => match (&dty1.dty, &dty2.dty) {
                 (
                     DataTyKind::Scalar(ScalarTy::U8)
                     | DataTyKind::Scalar(ScalarTy::U32)
                     | DataTyKind::Scalar(ScalarTy::U64)
-                    | DataTyKind::Scalar(ScalarTy::I32)
-                    ,
+                    | DataTyKind::Scalar(ScalarTy::I32),
                     DataTyKind::Scalar(ScalarTy::U8)
                     | DataTyKind::Scalar(ScalarTy::U32)
                     | DataTyKind::Scalar(ScalarTy::U64)
@@ -912,57 +916,38 @@ fn ty_check_binary_op(
                 _ => Err(TyError::String(format!(
                     "Expected integer types for operator {}, instead got\n Lhs: {:?}\n Rhs: {:?}",
                     bin_op, lhs, rhs
-                )))
-            }
+                ))),
+            },
             _ => Err(TyError::String(format!(
                 "Expected integer types for operator {}, instead got\n Lhs: {:?}\n Rhs: {:?}",
                 bin_op, lhs, rhs
             ))),
-        }
+        },
         _ => match (&lhs_ty.ty, &rhs_ty.ty) {
             (TyKind::Data(dty1), TyKind::Data(dty2)) => match (&dty1.dty, &dty2.dty) {
-                (
-                    DataTyKind::Scalar(ScalarTy::F32),
-                    DataTyKind::Scalar(ScalarTy::F32),
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::U8),
-                    DataTyKind::Scalar(ScalarTy::U8),
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::U32),
-                    DataTyKind::Scalar(ScalarTy::U32),
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::U64),
-                    DataTyKind::Scalar(ScalarTy::U64),
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::F64),
-                    DataTyKind::Scalar(ScalarTy::F64)
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::I32),
-                    DataTyKind::Scalar(ScalarTy::I32),
-                ) |
-                (
-                    DataTyKind::Scalar(ScalarTy::Bool),
-                    DataTyKind::Scalar(ScalarTy::Bool),
-                ) => Ok(ret_dty),
+                (DataTyKind::Scalar(ScalarTy::F32), DataTyKind::Scalar(ScalarTy::F32))
+                | (DataTyKind::Scalar(ScalarTy::U8), DataTyKind::Scalar(ScalarTy::U8))
+                | (DataTyKind::Scalar(ScalarTy::U32), DataTyKind::Scalar(ScalarTy::U32))
+                | (DataTyKind::Scalar(ScalarTy::U64), DataTyKind::Scalar(ScalarTy::U64))
+                | (DataTyKind::Scalar(ScalarTy::F64), DataTyKind::Scalar(ScalarTy::F64))
+                | (DataTyKind::Scalar(ScalarTy::I32), DataTyKind::Scalar(ScalarTy::I32))
+                | (DataTyKind::Scalar(ScalarTy::Bool), DataTyKind::Scalar(ScalarTy::Bool)) => {
+                    Ok(ret_dty)
+                }
                 _ => Err(TyError::String(format!(
                     "Expected the same number types for operator {}, instead got\n Lhs: {:?}\n Rhs: {:?}",
                     bin_op, dty1, dty2
-                )))
-            }
+                ))),
+            },
             _ => Err(TyError::String(format!(
                 "Expected the same number types for operator {}, instead got\n Lhs: {:?}\n Rhs: {:?}",
                 bin_op, lhs, rhs
             ))),
-        }
+        },
     }
 }
 
-fn ty_check_unary_op(ctx: &mut ExprTyCtx, un_op: &UnOp, e: &mut Expr) -> TyResult<Ty> {
+fn ty_check_unary_op(ctx: &mut ExprTyCtx, _un_op: &UnOp, e: &mut Expr) -> TyResult<Ty> {
     ty_check_expr(ctx, e)?;
     let e_ty = e.ty.as_ref().unwrap();
     let e_dty = if let TyKind::Data(dty) = &e_ty.ty {
@@ -993,8 +978,7 @@ fn ty_check_cast(ctx: &mut ExprTyCtx, e: &mut Expr, dty: &DataTy) -> TyResult<Ty
         | DataTyKind::Scalar(ScalarTy::I32)
         | DataTyKind::Scalar(ScalarTy::U8)
         | DataTyKind::Scalar(ScalarTy::U32)
-        | DataTyKind::Scalar(ScalarTy::U64)
-        => match dty.dty {
+        | DataTyKind::Scalar(ScalarTy::U64) => match dty.dty {
             DataTyKind::Scalar(ScalarTy::I32)
             | DataTyKind::Scalar(ScalarTy::U8)
             | DataTyKind::Scalar(ScalarTy::U32)
@@ -1006,8 +990,7 @@ fn ty_check_cast(ctx: &mut ExprTyCtx, e: &mut Expr, dty: &DataTy) -> TyResult<Ty
                 e_ty, dty
             ))),
         },
-        DataTyKind::Scalar(ScalarTy::Bool)
-        => match dty.dty {
+        DataTyKind::Scalar(ScalarTy::Bool) => match dty.dty {
             DataTyKind::Scalar(ScalarTy::I32)
             | DataTyKind::Scalar(ScalarTy::U8)
             | DataTyKind::Scalar(ScalarTy::U32)
@@ -1151,7 +1134,11 @@ fn apply_gen_args_checked(
     Ok(())
 }
 
-fn check_arg_has_correct_kind(kind_ctx: &KindCtx, expected: &Kind, kv: &ArgKinded) -> TyResult<()> {
+fn check_arg_has_correct_kind(
+    _kind_ctx: &KindCtx,
+    expected: &Kind,
+    kv: &ArgKinded,
+) -> TyResult<()> {
     if expected == &kv.kind() {
         Ok(())
     } else {
@@ -1198,7 +1185,7 @@ fn ty_check_app_kernel(ctx: &mut ExprTyCtx, app_kernel: &mut AppKernel) -> TyRes
     for arg in app_kernel.args.iter_mut() {
         ty_check_expr(ctx, arg)?;
     }
-    let mut kernel_exec = ExecExpr::new(ExecExprKind::new(BaseExec::GpuGrid(
+    let mut kernel_exec = ExecExpr::new(ExecExprKind::new(BaseExec::NpuGrid(
         app_kernel.grid_dim.clone(),
         app_kernel.block_dim.clone(),
     )));
@@ -1233,7 +1220,7 @@ fn ty_check_app_kernel(ctx: &mut ExprTyCtx, app_kernel: &mut AppKernel) -> TyRes
                 Ident::new_impli(&utils::fresh_name("shared_mem")),
                 Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::At(
                     Box::new(dty.clone()),
-                    Memory::GpuShared,
+                    Memory::NpuUb,
                 ))))),
                 Mutability::Mut,
                 kernel_ctx.exec.clone(),
@@ -1331,7 +1318,7 @@ fn ty_check_app_kernel(ctx: &mut ExprTyCtx, app_kernel: &mut AppKernel) -> TyRes
 
 fn exec_distrib_over_blocks(exec_expr: &ExecExpr) -> ExecExpr {
     let base_clone = ExecExprKind::new(exec_expr.exec.base.clone());
-    let distrib_over_blocks = if let BaseExec::GpuGrid(gdim, _) = &exec_expr.exec.base {
+    let distrib_over_blocks = if let BaseExec::NpuGrid(gdim, _) = &exec_expr.exec.base {
         match gdim {
             Dim::XYZ(_) => base_clone
                 .forall(DimCompo::X)
@@ -1345,7 +1332,7 @@ fn exec_distrib_over_blocks(exec_expr: &ExecExpr) -> ExecExpr {
             Dim::Z(_) => base_clone.forall(DimCompo::Z).forall(DimCompo::Z),
         }
     } else {
-        panic!("Expected GPU grid.")
+        panic!("Expected NPU grid.")
     };
     ExecExpr::new(distrib_over_blocks)
 }
@@ -1368,6 +1355,7 @@ fn ty_check_tuple(ctx: &mut ExprTyCtx, elems: &mut [Expr]) -> TyResult<Ty> {
     )))))
 }
 
+#[allow(unused)]
 fn ty_check_proj(ctx: &mut ExprTyCtx, e: &mut Expr, i: usize) -> TyResult<Ty> {
     if let ExprKind::PlaceExpr(_) = e.expr {
         panic!("Place expression should have been typechecked by a different rule.")
@@ -1376,7 +1364,9 @@ fn ty_check_proj(ctx: &mut ExprTyCtx, e: &mut Expr, i: usize) -> TyResult<Ty> {
     let e_dty = if let TyKind::Data(dty) = &e.ty.as_ref().unwrap().ty {
         dty.as_ref()
     } else {
-        return Err(TyError::UnexpectedType);
+        return Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(
+            DataTy::new(DataTyKind::Scalar(ScalarTy::I32)),
+        )))));
     };
     let elem_ty = proj_elem_dty(e_dty, i);
     Ok(Ty::new(TyKind::Data(Box::new(elem_ty?))))
@@ -1431,7 +1421,9 @@ fn infer_pattern_ident_tys(
     let pattern_dty = if let TyKind::Data(dty) = &pattern_ty.ty {
         dty.as_ref()
     } else {
-        return Err(TyError::UnexpectedType);
+        return Err(TyError::UnexpectedType(Ty::new(TyKind::Data(Box::new(
+            DataTy::new(DataTyKind::Scalar(ScalarTy::I32)),
+        )))));
     };
     match (pattern, &pattern_dty.dty) {
         (Pattern::Ident(mutbl, ident), _) => {
@@ -1451,7 +1443,12 @@ fn infer_pattern_ident_tys(
             }
             Ok(())
         }
-        _ => Err(TyError::PatternAndTypeDoNotMatch),
+        _ => Err(TyError::PatternAndTypeDoNotMatch(
+            Pattern::Ident(Mutability::Const, Ident::new("unknown")),
+            Ty::new(TyKind::Data(Box::new(DataTy::new(DataTyKind::Scalar(
+                ScalarTy::I32,
+            ))))),
+        )),
     }
 }
 
@@ -1631,11 +1628,7 @@ fn ty_check_borrow(
         },
         TyKind::FnTy(_) => return Err(TyError::String("Trying to borrow a function.".to_string())),
     };
-    if rmem == Memory::GpuLocal {
-        return Err(TyError::String(
-            "Trying to take reference of unaddressable gpu.local memory.".to_string(),
-        ));
-    }
+
     let res_dty = DataTy::new(DataTyKind::Ref(Box::new(RefDty::new(
         Provenance::Value(prv_val_name.clone()),
         own,
@@ -1649,16 +1642,16 @@ fn ty_check_borrow(
 fn allowed_mem_for_exec(exec_ty: &ExecTyKind) -> Vec<Memory> {
     match exec_ty {
         ExecTyKind::CpuThread => vec![Memory::CpuMem],
-        ExecTyKind::GpuThread
-        | ExecTyKind::GpuGrid(_, _)
-        | ExecTyKind::GpuBlock(_)
-        | ExecTyKind::GpuBlockGrp(_, _)
-        | ExecTyKind::GpuWarpGrp(_)
-        | ExecTyKind::GpuWarp
-        | ExecTyKind::GpuThreadGrp(_) => {
-            vec![Memory::GpuGlobal, Memory::GpuShared, Memory::GpuLocal]
+        ExecTyKind::NpuThread
+        | ExecTyKind::NpuGrid(_, _)
+        | ExecTyKind::NpuBlock(_)
+        | ExecTyKind::NpuBlockGrp(_, _)
+        | ExecTyKind::NpuWarpGrp(_)
+        | ExecTyKind::NpuWarp
+        | ExecTyKind::NpuThreadGrp(_) => {
+            vec![Memory::NpuGm, Memory::NpuUb]
         }
-        ExecTyKind::GpuToThreads(_, _) => vec![Memory::GpuGlobal, Memory::GpuLocal],
+        ExecTyKind::NpuToThreads(_, _) => vec![Memory::NpuGm, Memory::NpuUb],
         ExecTyKind::Any => vec![],
     }
 }
@@ -1674,6 +1667,7 @@ pub fn accessible_memory(exec_ty: &ExecTy, mem: &Memory) -> TyResult<()> {
     }
 }
 
+#[allow(unused)]
 // TODO respect memory
 fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty) -> TyResult<()> {
     match &ty.ty {
@@ -1695,7 +1689,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                     Provenance::Value(prv) => {
                         let elem_ty = Ty::new(TyKind::Data(reff.dty.clone()));
                         if !elem_ty.is_fully_alive() {
-                            return Err(TyError::ReferenceToDeadTy);
+                            return Err(TyError::ReferenceToDeadTy(PlaceExpr::new(PlaceExprKind::Ident(Ident::new("reference")))));
                         }
                         let loans = ty_ctx.loans_in_prv(prv)?;
                         if !loans.is_empty() {
@@ -1706,7 +1700,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                                     own: l_own,
                                 } = loan;
                                 if l_own != &reff.own {
-                                    return Err(TyError::ReferenceToWrongOwnership);
+                                    return Err(TyError::ReferenceToWrongOwnership(PlaceExpr::new(PlaceExprKind::Ident(Ident::new("reference")))));
                                 }
                                 let borrowed_pl_expr = place_expr.clone();
                                 // self.place_expr_ty_under_exec_own(
@@ -1718,7 +1712,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                                 // )?;
                                 if let TyKind::Data(pl_expr_dty) = borrowed_pl_expr.ty.unwrap().ty {
                                     if !pl_expr_dty.is_fully_alive() {
-                                        return Err(TyError::ReferenceToDeadTy);
+                                        return Err(TyError::ReferenceToDeadTy(PlaceExpr::new(PlaceExprKind::Ident(Ident::new("reference")))));
                                     }
                                     if dty.occurs_in(&pl_expr_dty) {
                                         exists = true;
@@ -1733,7 +1727,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                                             view type reference."
                                     )
                                 } else {
-                                    return Err(TyError::ReferenceToIncompatibleType);
+                                    return Err(TyError::ReferenceToIncompatibleType(PlaceExpr::new(PlaceExprKind::Ident(Ident::new("reference")))));
                                 }
                             }
                         }
@@ -1763,7 +1757,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                     ty_well_formed(kind_ctx, ty_ctx, exec_ty, &Ty::new(TyKind::Data(Box::new(dty.clone()))))?;
                 }
             }
-            DataTyKind::Array(elem_dty, n) => {
+            DataTyKind::Array(elem_dty, _n) => {
                 ty_well_formed(
                     kind_ctx,
                     ty_ctx,
@@ -1772,7 +1766,7 @@ fn ty_well_formed(kind_ctx: &KindCtx, ty_ctx: &TyCtx, exec_ty: &ExecTy, ty: &Ty)
                 )?;
                 // TODO well-formed nat
             }
-            DataTyKind::ArrayShape(elem_dty, n) => {
+            DataTyKind::ArrayShape(elem_dty, _n) => {
                 ty_well_formed(
                     kind_ctx,
                     ty_ctx,
@@ -1829,7 +1823,7 @@ pub fn callable_in(callee_exec_ty: &ExecTy, caller_exec_ty: &ExecTy) -> bool {
 
 fn expand_exec_expr(ctx: &ExprTyCtx, exec_expr: &ExecExpr) -> TyResult<ExecExpr> {
     match &exec_expr.exec.base {
-        BaseExec::CpuThread | BaseExec::GpuGrid(_, _) => Ok(exec_expr.clone()),
+        BaseExec::CpuThread | BaseExec::NpuGrid(_, _) => Ok(exec_expr.clone()),
         BaseExec::Ident(ident) => {
             let inner_exec_expr = ctx.ty_ctx.get_exec_expr_for_exec_ident(ident)?;
             let new_base = inner_exec_expr.exec.base.clone();
@@ -1854,15 +1848,17 @@ fn legal_exec_under_current(ctx: &ExprTyCtx, exec: &ExecExpr) -> TyResult<()> {
         let current_exec_ty = &ctx.exec.ty.as_ref().unwrap().ty;
         let expanded_exec_ty = expanded_exec_expr.ty.unwrap().ty;
         match (current_exec_ty, expanded_exec_ty) {
-            // FIXME Piet: this does not guarantee that the GpuWarpGrp was created from the GpuBlock
+            // FIXME Piet: this does not guarantee that the NpuWarpGrp was created from the NpuBlock
             //  TODO Basti: syntactically compare the exec expressions instead of types
             //   ctx.exec.to_warps == expanded_exec?
             //   ctx.exec.to_threads == expanded_exec?
-            (ExecTyKind::GpuBlock(..), ExecTyKind::GpuWarpGrp(..)) => (),
+            (ExecTyKind::NpuBlock(..), ExecTyKind::NpuWarpGrp(..)) => (),
             _ => {
                 let mut print_state = PrintState::new();
                 print_state.print_exec_expr(exec);
-                return Err(TyError::IllegalExec);
+                return Err(TyError::IllegalExec(ExecExpr::new(ExecExprKind::new(
+                    BaseExec::CpuThread,
+                ))));
             }
         }
     }

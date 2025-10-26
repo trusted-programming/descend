@@ -1,0 +1,8 @@
+---
+source: tests/error_examples.rs
+expression: output
+---
+descend::file_io_error
+
+  × Failed to read file 'examples/error-examples/nonexistent_file.desc': entity not found
+  help: Check that the file exists and you have permission to read it

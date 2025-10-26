@@ -1,15 +1,15 @@
+use super::TyResult;
 use super::borrow_check::BorrowCheckCtx;
 use super::error::TyError;
-use super::TyResult;
 use crate::ast::{
-    utils, DataTy, DataTyKind, ExecExpr, ExecTyKind, FnTy, Ident, IdentExec, Memory, Nat, NatCtx,
-    Ownership, ParamSig, PlaceExpr, PlaceExprKind, Provenance, Ty, TyKind, View,
+    DataTy, DataTyKind, ExecExpr, ExecTyKind, FnTy, Ident, IdentExec, Memory, Nat, NatCtx,
+    Ownership, ParamSig, PlaceExpr, PlaceExprKind, Provenance, Ty, TyKind, View, utils,
 };
 use crate::ty_check::ctxs::{AccessCtx, GlobalCtx, KindCtx, TyCtx};
 
 use crate::ty_check::unify;
 use crate::ty_check::unify::ConstrainMap;
-use crate::ty_check::{exec, ExprTyCtx};
+use crate::ty_check::{ExprTyCtx, exec};
 
 pub(super) struct PlExprTyCtx<'gl, 'src, 'ctxt> {
     gl_ctx: &'ctxt GlobalCtx<'gl, 'src>,
@@ -217,14 +217,14 @@ fn ty_check_ident(
 fn default_mem_by_exec(exec_ty: &ExecTyKind) -> Option<Memory> {
     match exec_ty {
         ExecTyKind::CpuThread => Some(Memory::CpuMem),
-        ExecTyKind::GpuThread => Some(Memory::GpuLocal),
-        ExecTyKind::GpuGrid(_, _) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuToThreads(_, _) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuBlockGrp(_, _) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuThreadGrp(_) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuBlock(_) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuWarpGrp(_) => Some(Memory::GpuLocal),
-        ExecTyKind::GpuWarp => Some(Memory::GpuLocal),
+        ExecTyKind::NpuThread => Some(Memory::NpuUb),
+        ExecTyKind::NpuGrid(_, _) => Some(Memory::NpuUb),
+        ExecTyKind::NpuToThreads(_, _) => Some(Memory::NpuUb),
+        ExecTyKind::NpuBlockGrp(_, _) => Some(Memory::NpuUb),
+        ExecTyKind::NpuThreadGrp(_) => Some(Memory::NpuUb),
+        ExecTyKind::NpuBlock(_) => Some(Memory::NpuUb),
+        ExecTyKind::NpuWarpGrp(_) => Some(Memory::NpuUb),
+        ExecTyKind::NpuWarp => Some(Memory::NpuUb),
         ExecTyKind::Any => None,
     }
 }
@@ -372,7 +372,7 @@ fn ty_check_select(
     let (mems, prvs) = ty_check_and_passed_mems_prvs(&outer_ctx, p)?;
     let mut p_dty = p.ty.as_ref().unwrap().dty().clone();
     match p_dty.dty {
-        DataTyKind::Array(elem_dty, n) | DataTyKind::ArrayShape(elem_dty, n) => {
+        DataTyKind::Array(elem_dty, _n) | DataTyKind::ArrayShape(elem_dty, _n) => {
             // TODO check sizes
             // if n != distrib_exec.active_distrib_size() {
             //     return Err(TyError::String("There must be as many elements in the view
@@ -414,7 +414,7 @@ fn ty_check_index(
         _ => {
             return Err(TyError::String(
                 "Trying to index into non array type.".to_string(),
-            ))
+            ));
         }
     };
 

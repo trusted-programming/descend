@@ -1,7 +1,2 @@
-#[path = "mlir/core.rs"]
-mod core;
-
-#[path = "mlir/error_examples.rs"]
-mod error_examples;
-
-const BACKEND: descend::Backend = descend::Backend::Mlir;
+// Automatically generate tests for all .desc files in examples/core/
+descend_derive::generate_desc_tests!("examples/core", false);

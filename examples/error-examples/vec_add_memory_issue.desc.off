@@ -1,0 +1,50 @@
+// Vector addition kernel demonstrating Descend's safe NPU programming model
+// This function showcases extended borrow checking, memory safety, and execution context tracking
+
+// Generic function with type parameters:
+// - n: nat - Natural number parameter (for array size, though not used in this specific function)
+// - r: prv - Provenance parameter tracking memory region/lifetime for all references
+fn add<n: nat, r: prv>(
+    // Shared reference to first input vector - multiple threads can read simultaneously
+    // Memory space: npu.global (NPU global memory)
+    // Ownership: shrd (shared) - prevents write-after-read data races
+    // Type: 16-element array of 16-bit signed integers
+    a: &r shrd npu.global [i16; 16],
+    
+    // Shared reference to second input vector - multiple threads can read simultaneously  
+    // Same memory space and ownership constraints as 'a'
+    b: &r shrd npu.global [i16; 16],
+    
+    // ERROR: This parameter should be declared as 'unq' (unique) instead of 'shrd' (shared)
+    // because it's used for assignment (c = a + b). Shared references are read-only and
+    // prevent data races by allowing multiple concurrent readers. Unique references are
+    // required for write operations to ensure exclusive access and prevent race conditions.
+    // The Descend compiler will detect this ownership violation and fail compilation.
+    c: &r shrd npu.global [i16; 16]
+    
+// Execution context specification - defines how this function runs on NPU hardware
+// - grid: npu.grid<X<1>, X<16>> - NPU execution grid with 1 block containing 16 threads
+// - The type system ensures NPU memory is only accessed in NPU execution contexts
+// - Prevents invalid cross-device memory accesses (CPU accessing NPU memory)
+) -[grid: npu.grid<X<1>, X<16>>]-> () {
+    
+    // Vector addition operation - element-wise addition of arrays
+    // The compiler generates safe parallel code that:
+    // 1. Loads data from global memory to local memory for each thread
+    // 2. Performs vectorized addition using HIVM dialect operations
+    // 3. Stores results back to global memory safely
+    // The ownership system ensures this operation is race-free
+    //
+    // LAZY LOADING: Descend's compiler implements lazy loading strategies:
+    // - Memory loads are deferred until actually needed by computation
+    // - The HIVM dialect generates 'hivm.hir.load' operations that load from
+    //   global memory (gm) to local memory (ub) only when data is accessed
+    // - This minimizes memory bandwidth usage and improves cache efficiency
+    // - The type system ensures loads happen in the correct execution context
+    // - Shared references enable read-only access without unnecessary copies
+    c = a + b;
+    
+    // Unit return value - indicates successful completion
+    // In MLIR, this becomes a 'return' operation
+    ()
+}

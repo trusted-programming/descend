@@ -1,0 +1,16 @@
+---
+source: tests/error_examples.rs
+expression: output
+---
+descend::parse_error
+
+  × Parse error: Parse error: Parse error: expected one of "!=", "%", "&", "&&", "(", "*", "+", "-", ".", "..", "/", "::<", "::<<<", ";", "<", "<<", "<=", "=", "==", ">", ">=", ">>", "[", "as", "|",
+  │ "||", "}"
+    ╭─[examples/error-examples/parse_error.desc:9:12]
+  8 │     // Missing semicolon and incomplete expression
+  9 │     return 42
+    ·            ┬
+    ·            ╰── Parse error location
+ 10 │ }
+    ╰────
+  help: Check the syntax of your Descend code

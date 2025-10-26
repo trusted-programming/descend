@@ -6,13 +6,13 @@ fn main() -[t: cpu.thread]-> () <'a>{
 fn softmax<n: nat, r: prv>(
     h_input: &r uniq cpu.mem [f32; n]
 ) -[t: cpu.thread]-> () <'a> {
-    let mut gpu = gpu_device(0);
+    let mut npu = npu_device(0);
     
-    // Copy input to GPU
-    let mut input = gpu_alloc_copy(&uniq gpu, &shrd *h_input);
+    // Copy input to NPU
+    let mut input = npu_alloc_copy(&uniq npu, &shrd *h_input);
     
     // Step 1: Compute exp(x) for each element
-    gpu_softmax_exp::<<<X<64>, X<1024>>>>(&uniq input);
+    npu_softmax_exp::<<<X<64>, X<1024>>>>(&uniq input);
     
     // Step 2: Create temporary array for exp values
     let mut temp_array: &'a uniq cpu.mem [f32; n] = unsafe _;
@@ -26,19 +26,19 @@ fn softmax<n: nat, r: prv>(
         exp_sum = exp_sum + *x
     };
     
-    // Step 4: Copy back to GPU for normalization
-    let mut input2 = gpu_alloc_copy(&uniq gpu, &shrd *temp_array);
+    // Step 4: Copy back to NPU for normalization
+    let mut input2 = npu_alloc_copy(&uniq npu, &shrd *temp_array);
     
     // Step 5: Normalize by dividing each element by the sum
-    gpu_softmax_normalize::<<<X<64>, X<1024>>>>(&uniq input2, exp_sum);
+    npu_softmax_normalize::<<<X<64>, X<1024>>>>(&uniq input2, exp_sum);
     
     // Copy final result back to host
     copy_to_host(&shrd input2, h_input)
 }
 
-fn gpu_softmax_exp<n: nat, r: prv>(
-    input: &r uniq gpu.global [f32; n]
-) -[grid: gpu.grid<X<64>, X<1024>>]-> () {
+fn npu_softmax_exp<n: nat, r: prv>(
+    input: &r uniq npu.global [f32; n]
+) -[grid: npu.grid<X<64>, X<1024>>]-> () {
     sched block in grid {
         sched thread in block {
             let elem = &uniq (*input).to_view.grp::<1024>[[block]][[thread]];
@@ -47,10 +47,10 @@ fn gpu_softmax_exp<n: nat, r: prv>(
     }
 }
 
-fn gpu_softmax_normalize<n: nat, r: prv>(
-    input: &r uniq gpu.global [f32; n],
+fn npu_softmax_normalize<n: nat, r: prv>(
+    input: &r uniq npu.global [f32; n],
     sum: f32
-) -[grid: gpu.grid<X<64>, X<1024>>]-> () {
+) -[grid: npu.grid<X<64>, X<1024>>]-> () {
     sched block in grid {
         sched thread in block {
             let elem = &uniq (*input).to_view.grp::<1024>[[block]][[thread]];

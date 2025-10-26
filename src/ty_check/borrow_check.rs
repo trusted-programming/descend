@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::ty_check::ctxs::{AccessCtx, GlobalCtx, KindCtx};
 use crate::ty_check::error::BorrowingError;
 use crate::ty_check::exec::normalize;
-use crate::ty_check::{exec, pre_decl, ExprTyCtx};
+use crate::ty_check::{ExprTyCtx, exec, pre_decl};
 use std::collections::HashSet;
 
 type OwnResult<T> = Result<T, BorrowingError>;
@@ -98,7 +98,7 @@ pub(super) fn borrow_check(ctx: &BorrowCheckCtx, p: &PlaceExpr) -> OwnResult<Has
             },
             DataTyKind::RawPtr(_) => ownership_safe_deref_raw(ctx, &pl_ctx_no_deref, &most_spec_pl),
             // TODO improve error message
-            t => ownership_safe_place(ctx, p), //panic!("Is the type dead? `{:?}`\n {:?}", t, p),
+            _t => ownership_safe_place(ctx, p), //panic!("Is the type dead? `{:?}`\n {:?}", t, p),
         }
     }
 }
@@ -445,7 +445,7 @@ fn conflicting_path(pathl: &[PlExprPathElem], pathr: &[PlExprPathElem]) -> bool 
             (v @ PlExprPathElem::View(iv), path_elem)
                 if v != path_elem && iv.name.name.as_ref() != pre_decl::SELECT_RANGE =>
             {
-                return true
+                return true;
             }
             (PlExprPathElem::View(ivl), PlExprPathElem::View(ivr))
                 if ivl != ivr
@@ -459,10 +459,10 @@ fn conflicting_path(pathl: &[PlExprPathElem], pathr: &[PlExprPathElem]) -> bool 
                     &ivr.gen_args[1],
                 ) {
                     (
-                        ArgKinded::Nat(lower_left),
-                        ArgKinded::Nat(upper_left),
-                        ArgKinded::Nat(lower_right),
-                        ArgKinded::Nat(upper_right),
+                        ArgKinded::Nat(_lower_left),
+                        ArgKinded::Nat(_upper_left),
+                        ArgKinded::Nat(_lower_right),
+                        ArgKinded::Nat(_upper_right),
                     ) => {
                         // intersecting ranges
                         // TAKE CARE: the comparisons are partial and return false in case the

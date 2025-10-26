@@ -75,7 +75,7 @@ pub(super) struct ConstrainMap {
     pub nat_unifier: HashMap<Box<str>, Nat>,
     pub mem_unifier: HashMap<Box<str>, Memory>,
     pub prv_unifier: HashMap<Box<str>, Provenance>,
-    pub exec_unifier: HashMap<Box<str>, ExecExpr>,
+    pub _exec_unifier: HashMap<Box<str>, ExecExpr>,
 }
 
 impl ConstrainMap {
@@ -85,7 +85,7 @@ impl ConstrainMap {
             nat_unifier: HashMap::new(),
             mem_unifier: HashMap::new(),
             prv_unifier: HashMap::new(),
-            exec_unifier: HashMap::new(),
+            _exec_unifier: HashMap::new(),
         }
     }
 }
@@ -154,7 +154,10 @@ impl Constrainable for FnTy {
         substitute(constr_map, other);
 
         if self.param_sigs.len() != other.param_sigs.len() {
-            return Err(UnifyError::CannotUnify);
+            return Err(UnifyError::cannot_unify_unknown(
+                "function parameter count mismatch",
+                None,
+            ));
         }
         // TODO refactor
         // substitute result of unification for every following unification
@@ -234,15 +237,20 @@ impl Constrainable for ExecExpr {
                 if i1 == i2 {
                     return Ok(());
                 } else {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown(
+                        "exec expression identifiers do not match",
+                        None,
+                    ));
                 }
             }
             (BaseExec::CpuThread, BaseExec::CpuThread) => {}
-            (BaseExec::GpuGrid(gdim1, bdim1), BaseExec::GpuGrid(gdim2, bdim2)) => {
+            (BaseExec::NpuGrid(gdim1, bdim1), BaseExec::NpuGrid(gdim2, bdim2)) => {
                 gdim1.constrain(gdim2, constr_map, prv_rels)?;
                 bdim1.constrain(bdim2, constr_map, prv_rels)?;
             }
-            _ => return Err(UnifyError::CannotUnify),
+            _ => {
+                return Err(UnifyError::cannot_unify_unknown("unification failed", None));
+            }
         }
 
         let mut i = 0;
@@ -264,20 +272,31 @@ impl Constrainable for ExecExpr {
                 (ExecPathElem::ForAll(dl), ExecPathElem::ForAll(dr))
                 | (ExecPathElem::ToThreads(dl), ExecPathElem::ToThreads(dr)) => {
                     if dl != dr {
-                        return Err(UnifyError::CannotUnify);
+                        return Err(UnifyError::cannot_unify_unknown(
+                            "execution path element unification failed",
+                            None,
+                        ));
                     }
                 }
                 (ExecPathElem::TakeRange(rl), ExecPathElem::TakeRange(rr)) => {
                     if rl.split_dim != rr.split_dim {
-                        return Err(UnifyError::CannotUnify);
+                        return Err(UnifyError::cannot_unify_unknown(
+                            "execution path element unification failed",
+                            None,
+                        ));
                     }
                     if rl.left_or_right != rr.left_or_right {
-                        return Err(UnifyError::CannotUnify);
+                        return Err(UnifyError::cannot_unify_unknown(
+                            "execution path element unification failed",
+                            None,
+                        ));
                     }
                     rl.pos.constrain(&mut rr.pos, constr_map, prv_rels)?
                 }
                 (ExecPathElem::ToWarps, ExecPathElem::ToWarps) => {}
-                _ => return Err(UnifyError::CannotUnify),
+                _ => {
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
+                }
             }
 
             i += 1;
@@ -307,7 +326,12 @@ impl Constrainable for Ty {
                 fn_ty1.constrain(fn_ty2, constr_map, prv_rels)
             }
             (TyKind::Data(dty1), TyKind::Data(dty2)) => dty1.constrain(dty2, constr_map, prv_rels),
-            _ => Err(UnifyError::CannotUnify),
+            _ => Err(UnifyError::cannot_unify_with_string(
+                Ty::new(self.ty.clone()),
+                Ty::new(other.ty.clone()),
+                "cannot unify different type kinds",
+                None,
+            )),
         }
     }
 }
@@ -335,7 +359,7 @@ impl Constrainable for DataTy {
                 } else if i1 == i2 {
                     return Ok(());
                 } else {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 }
                 substitute(constr_map, self);
                 substitute(constr_map, other);
@@ -350,7 +374,7 @@ impl Constrainable for DataTy {
             }
             (DataTyKind::Scalar(sty1), DataTyKind::Scalar(sty2)) => {
                 if sty1 != sty2 {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 } else {
                     return Ok(());
                 }
@@ -370,7 +394,7 @@ impl Constrainable for DataTy {
                 } = ref2.as_mut();
 
                 if own1 != own2 {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 }
                 rgn1.constrain(rgn2, constr_map, prv_rels)?;
                 substitute(constr_map, &mut **dty1);
@@ -412,7 +436,10 @@ impl Constrainable for DataTy {
                     (remain_lhs.split_first_mut(), remain_rhs.split_first_mut())
                 {
                     if next_lhs.0 != next_rhs.0 {
-                        return Err(UnifyError::CannotUnify);
+                        return Err(UnifyError::cannot_unify_unknown(
+                            "execution path element unification failed",
+                            None,
+                        ));
                     }
                     next_lhs
                         .1
@@ -450,7 +477,7 @@ impl Constrainable for DataTy {
             }
             (DataTyKind::Atomic(sty1), DataTyKind::Atomic(sty2)) => {
                 if sty1 != sty2 {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 } else {
                     return Ok(());
                 }
@@ -466,7 +493,9 @@ impl Constrainable for DataTy {
                 substitute(constr_map, self);
                 substitute(constr_map, other);
             }
-            _ => return Err(UnifyError::CannotUnify),
+            _ => {
+                return Err(UnifyError::cannot_unify_unknown("unification failed", None));
+            }
         }
         Ok(())
     }
@@ -488,31 +517,31 @@ impl Constrainable for ExecTy {
     ) -> UnifyResult<()> {
         match (&mut self.ty, &mut other.ty) {
             (ExecTyKind::CpuThread, ExecTyKind::CpuThread)
-            | (ExecTyKind::GpuThread, ExecTyKind::GpuThread)
-            | (ExecTyKind::GpuWarp, ExecTyKind::GpuWarp)
+            | (ExecTyKind::NpuThread, ExecTyKind::NpuThread)
+            | (ExecTyKind::NpuWarp, ExecTyKind::NpuWarp)
             | (_, ExecTyKind::Any) => Ok(()),
-            (ExecTyKind::GpuWarpGrp(nl), ExecTyKind::GpuWarpGrp(nr)) => {
+            (ExecTyKind::NpuWarpGrp(nl), ExecTyKind::NpuWarpGrp(nr)) => {
                 nl.constrain(nr, constr_map, prv_rels)
             }
-            (ExecTyKind::GpuGrid(lgdim, lbdim), ExecTyKind::GpuGrid(rgdim, rbdim))
-            | (ExecTyKind::GpuBlockGrp(lgdim, lbdim), ExecTyKind::GpuBlockGrp(rgdim, rbdim)) => {
+            (ExecTyKind::NpuGrid(lgdim, lbdim), ExecTyKind::NpuGrid(rgdim, rbdim))
+            | (ExecTyKind::NpuBlockGrp(lgdim, lbdim), ExecTyKind::NpuBlockGrp(rgdim, rbdim)) => {
                 lgdim.constrain(rgdim, constr_map, prv_rels)?;
                 lbdim.constrain(rbdim, constr_map, prv_rels)
             }
             (
-                ExecTyKind::GpuToThreads(ldim_compo, l_inner),
-                ExecTyKind::GpuToThreads(rdim_compo, r_inner),
+                ExecTyKind::NpuToThreads(ldim_compo, l_inner),
+                ExecTyKind::NpuToThreads(rdim_compo, r_inner),
             ) => {
                 if ldim_compo != rdim_compo {
-                    return Err(UnifyError::CannotUnify);
+                    return Err(UnifyError::cannot_unify_unknown("unification failed", None));
                 }
                 l_inner.constrain(r_inner, constr_map, prv_rels)
             }
-            (ExecTyKind::GpuBlock(ldim), ExecTyKind::GpuBlock(rdim))
-            | (ExecTyKind::GpuThreadGrp(ldim), ExecTyKind::GpuThreadGrp(rdim)) => {
+            (ExecTyKind::NpuBlock(ldim), ExecTyKind::NpuBlock(rdim))
+            | (ExecTyKind::NpuThreadGrp(ldim), ExecTyKind::NpuThreadGrp(rdim)) => {
                 ldim.constrain(rdim, constr_map, prv_rels)
             }
-            _ => Err(UnifyError::CannotUnify),
+            _ => Err(UnifyError::cannot_unify_unknown("unification failed", None)),
         }
     }
 }
@@ -546,7 +575,7 @@ impl Constrainable for Dim {
             (Dim::X(ld), Dim::X(rd)) | (Dim::Y(ld), Dim::Y(rd)) | (Dim::Z(ld), Dim::Z(rd)) => {
                 ld.0.constrain(&mut rd.0, constr_map, prv_rels)
             }
-            _ => Err(UnifyError::CannotUnify),
+            _ => Err(UnifyError::cannot_unify_unknown("unification failed", None)),
         }
     }
 }
@@ -589,7 +618,10 @@ impl Nat {
         if n1 == n2 {
             Ok(())
         } else {
-            Err(UnifyError::CannotUnify)
+            Err(UnifyError::cannot_unify_unknown(
+                "natural number expressions do not match",
+                None,
+            ))
         }
     }
 }
@@ -679,7 +711,7 @@ impl Constrainable for Memory {
             (Memory::Ident(i), o) => o.bind_to(i, constr_map),
             (s, Memory::Ident(i)) => s.bind_to(i, constr_map),
             (mem1, mem2) if mem1 == mem2 => Ok(()),
-            _ => Err(UnifyError::CannotUnify),
+            _ => Err(UnifyError::cannot_unify_unknown("unification failed", None)),
         }
     }
 }
@@ -882,7 +914,7 @@ mod tests {
         DataTy::new(DataTyKind::Ref(Box::new(RefDty::new(
             Provenance::Value("r".to_string()),
             Ownership::Shrd,
-            Memory::GpuGlobal,
+            Memory::NpuGm,
             DataTy::new(DataTyKind::Array(
                 Box::new(DataTy::new(DataTyKind::Scalar(ScalarTy::I32))),
                 Nat::Ident(Ident::new("n")),
@@ -917,7 +949,7 @@ mod tests {
         let mut shrd_ref_t = DataTy::new(DataTyKind::Ref(Box::new(RefDty::new(
             Provenance::Value("r".to_string()),
             Ownership::Shrd,
-            Memory::GpuGlobal,
+            Memory::NpuGm,
             DataTy::new(DataTyKind::Ident(Ident::new_impli("t"))),
         ))));
         let mut shrd_ref = shrd_ref_ty();
@@ -934,7 +966,7 @@ mod tests {
         let mut shrd_ref_t = DataTy::new(DataTyKind::Ref(Box::new(RefDty::new(
             Provenance::Ident(Ident::new("a")),
             Ownership::Shrd,
-            Memory::GpuGlobal,
+            Memory::NpuGm,
             DataTy::new(DataTyKind::Ident(Ident::new_impli("t"))),
         ))));
         let mut shrd_ref = shrd_ref_ty();

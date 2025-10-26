@@ -1,7 +1,7 @@
 use melior::ir::Value;
 
 use super::super::error::MlirError;
-use super::context::{create_index_constant, MlirContext};
+use super::context::{MlirContext, create_index_constant};
 use super::ops::build_nat_binary_operation;
 use crate::ast as desc;
 
@@ -40,7 +40,7 @@ where
         | Nat::WarpIdx
         | Nat::LaneIdx
         | Nat::GridIdx => {
-            unimplemented!("GPU-specific natural numbers not yet supported in MLIR backend")
+            unimplemented!("NPU-specific natural numbers not yet supported in MLIR backend")
         }
         Nat::App(_, _) => {
             unimplemented!("Natural number function application not yet supported in MLIR backend")

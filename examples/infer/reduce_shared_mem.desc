@@ -2,11 +2,11 @@ fn reduce_shared_mem<gs: nat, bs: nat, a: prv, b: prv>(
     ha_array: &a shrd cpu.mem [i32; gs*bs],
     h_output: &b uniq cpu.mem [i32; gs]
 ) -[t: cpu.thread]-> () {
-    let mut gpu = gpu_device(0);
+    let mut npu = npu_device(0);
 
-    let a_array = gpu_alloc_copy(&uniq gpu, ha_array);
-    let mut out_array = gpu_alloc_copy(&uniq gpu, &shrd *h_output);
-    gpu_reduce::<<<X<gs>, X<bs>; [i32; bs]>>>(&shrd a_array, &uniq out_array);
+    let a_array = npu_alloc_copy(&uniq npu, ha_array);
+    let mut out_array = npu_alloc_copy(&uniq npu, &shrd *h_output);
+    npu_reduce::<<<X<gs>, X<bs>; [i32; bs]>>>(&shrd a_array, &uniq out_array);
     copy_to_host(&shrd out_array, &uniq *h_output);
     let mut res = 0;
     for x in h_output {
@@ -14,11 +14,11 @@ fn reduce_shared_mem<gs: nat, bs: nat, a: prv, b: prv>(
     }
 }
 
-fn gpu_reduce<gs: nat, bs: nat, r1: prv, r2: prv, r3: prv>(
-    vec: &r1 shrd gpu.global [i32; gs*bs],
-    out_vec: &r2 uniq gpu.global [i32; gs],
-    tmp: &r3 uniq gpu.shared [i32; bs]
-) -[grid: gpu.grid<X<64>, X<1024>>]-> () {
+fn npu_reduce<gs: nat, bs: nat, r1: prv, r2: prv, r3: prv>(
+    vec: &r1 shrd npu.global [i32; gs*bs],
+    out_vec: &r2 uniq npu.global [i32; gs],
+    tmp: &r3 uniq npu.shared [i32; bs]
+) -[grid: npu.grid<X<64>, X<1024>>]-> () {
     let block_group = &shrd (*vec).to_view.grp::<1024>;
     let view_out = &uniq (*out_vec).to_view.grp::<1>;
     sched block in grid {

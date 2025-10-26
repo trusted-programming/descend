@@ -4,27 +4,27 @@ fn sgemm<m: nat, n: nat, k: nat, a: prv, b: prv, c: prv, d: prv>(
   c_mat_h: &c shrd cpu.mem [[i32; n]; m],
   out_mat_h: &d uniq cpu.mem [[i32; n]; m]
 ) -[t: cpu.thread]-> () {
-  let mut gpu = gpu_device(0);
-  let a_transp_mat = gpu_alloc_copy(&uniq gpu, &shrd *a_transp_mat_h);
-  let b_mat = gpu_alloc_copy(&uniq gpu, &shrd *b_mat_h);
-  let c_mat = gpu_alloc_copy(&uniq gpu, &shrd *c_mat_h);
-  let mut out_mat = gpu_alloc_copy(&uniq gpu, &shrd *out_mat_h);
+  let mut npu = npu_device(0);
+  let a_transp_mat = npu_alloc_copy(&uniq npu, &shrd *a_transp_mat_h);
+  let b_mat = npu_alloc_copy(&uniq npu, &shrd *b_mat_h);
+  let c_mat = npu_alloc_copy(&uniq npu, &shrd *c_mat_h);
+  let mut out_mat = npu_alloc_copy(&uniq npu, &shrd *out_mat_h);
 
-  sgemm_gpu::<<<XY<8, 16>, XY<32, 8>; [[i32; 32*2]; 8], [[i32; 32*4]; 8]>>>(
+  sgemm_npu::<<<XY<8, 16>, XY<32, 8>; [[i32; 32*2]; 8], [[i32; 32*4]; 8]>>>(
     &shrd a_transp_mat, &shrd b_mat, &shrd c_mat, &uniq out_mat, 1, 1
   );
   copy_to_host(&shrd out_mat, out_mat_h)
 }
 
-fn sgemm_gpu<m: nat, n: nat, k: nat, a: prv, b: prv, c: prv, d: prv>(
-  a_transp_mat: &a shrd gpu.global [[i32; m]; k],
-  b_mat: &b shrd gpu.global [[i32; n]; k],
-  c_mat: &c shrd gpu.global [[i32; n]; m],
-  out_mat: &d uniq gpu.global [[i32; n]; m],
+fn sgemm_npu<m: nat, n: nat, k: nat, a: prv, b: prv, c: prv, d: prv>(
+  a_transp_mat: &a shrd npu.global [[i32; m]; k],
+  b_mat: &b shrd npu.global [[i32; n]; k],
+  c_mat: &c shrd npu.global [[i32; n]; m],
+  out_mat: &d uniq npu.global [[i32; n]; m],
   alpha: i32, beta: i32,
-  [grid.forall(X).forall(Y)] a_tile: &r uniq gpu.shared [[i32; 32 * 2]; 8],
-  [grid.forall(X).forall(Y)] b_tile: &r uniq gpu.shared [[i32; 32 * 4]; 8]
-) -[grid: gpu.grid<XY<8, 16>, XY<32, 8>>]-> () {
+  [grid.forall(X).forall(Y)] a_tile: &r uniq npu.shared [[i32; 32 * 2]; 8],
+  [grid.forall(X).forall(Y)] b_tile: &r uniq npu.shared [[i32; 32 * 4]; 8]
+) -[grid: npu.grid<XY<8, 16>, XY<32, 8>>]-> () {
   sched(Y) grid_slices_y in grid { sched(X) blocks in grid_slices_y {
     sched(Y) block_slices_y in blocks { sched(X) thread in block_slices_y {
       for wgY in 0..(m/(64*16)) {

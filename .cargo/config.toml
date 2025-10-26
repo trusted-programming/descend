@@ -1,2 +1,0 @@
-[build]
-rustflags = ["-A", "unused_variables", "-A", "dead_code", "-A", "unreachable_code"]

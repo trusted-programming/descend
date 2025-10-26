@@ -27,6 +27,7 @@ macro_rules! print_static_list {
     };
 }
 
+#[allow(unused)]
 impl PrintState {
     pub fn new() -> Self {
         PrintState {
@@ -94,41 +95,41 @@ impl PrintState {
     pub fn print_exec_ty(&mut self, exec_ty: &ExecTy) {
         match &exec_ty.ty {
             ExecTyKind::CpuThread => self.string.push_str("cpu.thread"),
-            ExecTyKind::GpuGrid(gdim, bdim) => {
-                self.string.push_str("gpu.grid<");
+            ExecTyKind::NpuGrid(gdim, bdim) => {
+                self.string.push_str("npu.grid<");
                 print_static_list!(self, Self::print_dim, gdim, bdim);
                 self.string.push('>');
             }
-            ExecTyKind::GpuToThreads(dim, exec_ty) => {
-                self.string.push_str("gpu.global_threads<");
+            ExecTyKind::NpuToThreads(dim, exec_ty) => {
+                self.string.push_str("npu.global_threads<");
                 self.print_dim(dim);
                 self.string.push_str(", ");
                 self.print_exec_ty(exec_ty);
                 self.string.push('>');
             }
-            ExecTyKind::GpuBlock(bdim) => {
-                self.string.push_str("gpu.block<");
+            ExecTyKind::NpuBlock(bdim) => {
+                self.string.push_str("npu.block<");
                 self.print_dim(bdim);
                 self.string.push('>');
             }
-            ExecTyKind::GpuThread => self.string.push_str("gpu.thread"),
-            ExecTyKind::GpuBlockGrp(gdim, bdim) => {
-                self.string.push_str("gpu.block_grp<");
+            ExecTyKind::NpuThread => self.string.push_str("npu.thread"),
+            ExecTyKind::NpuBlockGrp(gdim, bdim) => {
+                self.string.push_str("npu.block_grp<");
                 print_static_list!(self, Self::print_dim, gdim, bdim);
                 self.string.push('>');
             }
-            ExecTyKind::GpuThreadGrp(dim) => {
-                self.string.push_str("gpu.thread_grp<");
+            ExecTyKind::NpuThreadGrp(dim) => {
+                self.string.push_str("npu.thread_grp<");
                 self.print_dim(dim);
                 self.string.push('>');
             }
             ExecTyKind::Any => self.string.push_str("view"),
-            ExecTyKind::GpuWarpGrp(n) => {
-                self.string.push_str("gpu.warp_grp<");
+            ExecTyKind::NpuWarpGrp(n) => {
+                self.string.push_str("npu.warp_grp<");
                 self.print_nat(n);
                 self.string.push('>');
             }
-            ExecTyKind::GpuWarp => {}
+            ExecTyKind::NpuWarp => {}
         }
     }
 
@@ -136,8 +137,8 @@ impl PrintState {
         match &exec_expr.exec.base {
             BaseExec::Ident(ident) => self.print_ident(ident),
             BaseExec::CpuThread => self.string.push_str("cpu.thread"),
-            BaseExec::GpuGrid(gdim, bdim) => {
-                self.string.push_str("gpu.grid<");
+            BaseExec::NpuGrid(gdim, bdim) => {
+                self.string.push_str("npu.grid<");
                 self.print_dim(gdim);
                 self.string.push_str(", ");
                 self.print_dim(bdim);
@@ -298,7 +299,7 @@ impl PrintState {
             ScalarTy::F32 => self.string.push_str("f32"),
             ScalarTy::F64 => self.string.push_str("f64"),
             ScalarTy::Bool => self.string.push_str("bool"),
-            ScalarTy::Gpu => self.string.push_str("Gpu"),
+            ScalarTy::Npu => self.string.push_str("Npu"),
             ScalarTy::U8 => self.string.push_str("u8"),
         }
     }
@@ -306,9 +307,8 @@ impl PrintState {
     fn print_mem(&mut self, mem: &Memory) {
         match mem {
             Memory::CpuMem => self.string.push_str("cpu.mem"),
-            Memory::GpuGlobal => self.string.push_str("gpu.global"),
-            Memory::GpuShared => self.string.push_str("gpu.shared"),
-            Memory::GpuLocal => self.string.push_str("gpu.local"),
+            Memory::NpuGm => self.string.push_str("npu.gm"),
+            Memory::NpuUb => self.string.push_str("npu.ub"),
             Memory::Ident(x) => self.print_ident(x),
         }
     }

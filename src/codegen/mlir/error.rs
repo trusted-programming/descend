@@ -1,30 +1,3 @@
-//! MLIR Codegen Error Handling
-//!
-//! This module provides comprehensive error handling for the MLIR codegen backend.
-//! It defines custom error types that capture different failure modes during
-//! MLIR code generation, providing detailed error information for debugging.
-//!
-//! # Error Types
-//!
-//! - `General`: For general MLIR codegen errors with custom messages
-//! - `TypeParseError`: For MLIR type parsing failures
-//! - `OperationBuildError`: For MLIR operation construction failures
-//! - `MissingResult`: For operations that fail to produce expected results
-//! - `InvalidOperation`: For operations that are malformed or invalid
-//! - `ContextError`: For context-related errors during codegen
-//!
-//! # Usage
-//!
-//! ```rust
-//! use descend::codegen::mlir::error::{MlirError, type_parse_error};
-//!
-//! // Create specific error types
-//! let err = type_parse_error("invalid_type");
-//!
-//! // Convert to string for display
-//! println!("Error: {}", err);
-//! ```
-
 use std::fmt;
 
 /// Errors that can occur during MLIR code generation

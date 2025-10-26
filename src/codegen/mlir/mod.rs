@@ -1,33 +1,3 @@
-//! MLIR Code Generation Module
-//!
-//! This module provides code generation from the Descend AST to MLIR (Multi-Level Intermediate Representation).
-//! It supports both standard MLIR generation and HIVM (Heterogeneous Intermediate Virtual Machine) dialect
-//! with GPU memory address spaces.
-//!
-//! ## Architecture
-//!
-//! The codegen uses a two-pass compilation strategy:
-//! 1. **Pass 1**: Declare all functions and record their result types
-//! 2. **Pass 2**: Build function bodies with knowledge of callee result types
-//!
-//! This approach enables proper function call generation where callers know the return types
-//! of their callees, which is essential for MLIR's SSA form.
-//!
-//! ## HIVM Address Spaces
-//!
-//! When GPU memory qualifiers are detected (GpuGlobal, GpuShared, GpuLocal), the codegen
-//! switches to a string-based generation path that includes HIVM dialect address space attributes:
-//! - `#hivm.address_space<gm>` for global memory
-//! - `#hivm.address_space<ub>` for local memory
-//!
-//! ## Usage
-//!
-//! ```rust,no_run
-//! // Example usage (requires proper compilation unit)
-//! // let mlir_string = gen(&comp_unit, false);
-//! // let mlir_string = gen_checked(&comp_unit, false)?;
-//! ```
-
 pub mod builder;
 pub mod error;
 pub mod to_mlir;
@@ -35,14 +5,13 @@ pub mod to_mlir;
 use builder::MlirBuilder;
 use error::MlirError;
 use melior::{
-    dialect::DialectRegistry,
-    ir::{operation::OperationLike, Location, Module},
-    utility::register_all_dialects,
     Context,
+    dialect::DialectRegistry,
+    ir::{Location, Module, operation::OperationLike},
+    utility::register_all_dialects,
 };
 
 use crate::ast::CompilUnit;
-use crate::ast::{DataTyKind, Memory, TyKind};
 
 /// Internal helper function to build MLIR module
 fn build_module_internal(comp_unit: &CompilUnit) -> Result<String, MlirError> {
@@ -94,34 +63,13 @@ fn needs_hivm_address_space(comp_unit: &CompilUnit) -> bool {
     for item in &comp_unit.items {
         if let crate::ast::Item::FunDef(fun) = item {
             for param in &fun.param_decls {
-                if let Some(ty) = &param.ty {
-                    if has_gpu_memory(ty) {
-                        return true;
-                    }
+                if let Some(_ty) = &param.ty {
+                    // TODO: check if the type is a npu function
                 }
             }
         }
     }
     false
-}
-
-/// Check if a type has GPU memory qualifiers
-fn has_gpu_memory(ty: &crate::ast::Ty) -> bool {
-    fn mem_is_gpu(mem: &Memory) -> bool {
-        matches!(
-            mem,
-            Memory::GpuGlobal | Memory::GpuShared | Memory::GpuLocal
-        )
-    }
-
-    match &ty.ty {
-        TyKind::Data(data_ty) => match &data_ty.dty {
-            DataTyKind::At(_, mem) => mem_is_gpu(mem),
-            DataTyKind::Ref(ref_dty) => mem_is_gpu(&ref_dty.mem),
-            _ => false,
-        },
-        _ => false,
-    }
 }
 
 pub fn create_context() -> Context {

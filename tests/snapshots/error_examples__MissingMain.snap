@@ -1,0 +1,8 @@
+---
+source: tests/error_examples.rs
+expression: output
+---
+[31mdescend::missing_main_error[0m
+
+  [31m×[0m Missing main function
+[36m  help: [0mA main function is required as the entry point of your program

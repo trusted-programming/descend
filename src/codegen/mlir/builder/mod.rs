@@ -1,39 +1,3 @@
-//! MLIR Builder Module
-//!
-//! This module provides the core MLIR code generation functionality, including
-//! the main `MlirBuilder` struct and methods for building MLIR modules, functions,
-//! and expressions from Descend AST nodes.
-//!
-//! # Architecture
-//!
-//! The builder uses a two-pass compilation strategy:
-//! 1. **Pass 1**: Declare all functions and record their result types
-//! 2. **Pass 2**: Build function bodies with access to callee result types
-//!
-//! This approach ensures that function calls can reference the correct result types
-//! of their callees, enabling proper MLIR generation.
-//!
-//! # Key Components
-//!
-//! - `MlirBuilder`: Main builder struct that manages MLIR module construction
-//! - `MlirContext`: Context for managing variables and current block during codegen
-//! - Function building: Converts Descend function definitions to MLIR functions
-//! - Expression building: Handles various expression types (literals, operations, control flow)
-//!
-//! # Usage
-//!
-//! ```rust,no_run
-//! use descend::codegen::mlir::builder::MlirBuilder;
-//! use melior::{Context, ir::{Module, Location}};
-//!
-//! let context = Context::new();
-//! let module = Module::new(Location::unknown(&context));
-//! let mut builder = MlirBuilder::new(&context, module);
-//!
-//! // Build compilation unit (requires proper comp_unit)
-//! // builder.build_items_two_pass(&comp_unit);
-//! ```
-
 pub mod context;
 pub mod control_flow;
 pub mod expr;
@@ -44,9 +8,9 @@ pub mod ops;
 pub mod place;
 
 use melior::{
-    dialect::func,
-    ir::{operation::OperationLike, Block, BlockLike, Location, Module, RegionLike},
     Context,
+    dialect::func,
+    ir::{Block, BlockLike, Location, Module, RegionLike, operation::OperationLike},
 };
 
 use super::to_mlir::ToMlir;

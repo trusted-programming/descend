@@ -1,15 +1,15 @@
 fn scale_vec<n: nat, r: prv>(
     h_vec: &r uniq cpu.mem [f64; n]
 ) -[t: cpu.thread]-> () {
-    let mut gpu = gpu_device(0);
-    let mut a_array = gpu_alloc_copy(&uniq gpu, &shrd *h_vec);
+    let mut npu = npu_device(0);
+    let mut a_array = npu_alloc_copy(&uniq npu, &shrd *h_vec);
     par_scale_vec::<<<X<64>, X<1024>>>>(&uniq a_array);
     copy_to_host(&shrd a_array, h_vec)
 }
 
 fn par_scale_vec<n: nat, r: prv>(
-    vec: &r uniq gpu.global [f64; n]
-) -[grid: gpu.grid<X<64>, X<1024>>]-> () {
+    vec: &r uniq npu.global [f64; n]
+) -[grid: npu.grid<X<64>, X<1024>>]-> () {
     sched block in grid {
         sched thread in block {
             let v = &uniq (*vec).to_view.grp::<1024>.map(rev)[[block]][[thread]];

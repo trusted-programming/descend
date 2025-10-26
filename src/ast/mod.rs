@@ -430,6 +430,12 @@ impl Ident {
     }
 }
 
+impl fmt::Display for Ident {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     Ident(Mutability, Ident),
@@ -877,7 +883,7 @@ impl ExecExpr {
                 }
             }
             (BaseExec::CpuThread, BaseExec::CpuThread) => (),
-            (BaseExec::GpuGrid(gdim, bdim), BaseExec::GpuGrid(gdimo, bdimo)) => {
+            (BaseExec::NpuGrid(gdim, bdim), BaseExec::NpuGrid(gdimo, bdimo)) => {
                 if !(gdim.equal(nat_ctx, gdimo)? && bdim.equal(nat_ctx, bdimo)?) {
                     return Ok(false);
                 }
@@ -1004,7 +1010,7 @@ impl ExecExprKind {
 pub enum BaseExec {
     Ident(Ident),
     CpuThread,
-    GpuGrid(Dim, Dim),
+    NpuGrid(Dim, Dim),
 }
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
@@ -1039,14 +1045,14 @@ impl ExecTy {
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub enum ExecTyKind {
     CpuThread,
-    GpuThread,
-    GpuWarp,
-    GpuBlock(Dim),
-    GpuGrid(Dim, Dim),
-    GpuToThreads(Dim, Box<ExecTy>),
-    GpuThreadGrp(Dim),
-    GpuWarpGrp(Nat),
-    GpuBlockGrp(Dim, Dim),
+    NpuThread,
+    NpuWarp,
+    NpuBlock(Dim),
+    NpuGrid(Dim, Dim),
+    NpuToThreads(Dim, Box<ExecTy>),
+    NpuThreadGrp(Dim),
+    NpuWarpGrp(Nat),
+    NpuBlockGrp(Dim, Dim),
     Any,
 }
 
@@ -1220,6 +1226,17 @@ pub enum DimCompo {
     X,
     Y,
     Z,
+}
+
+impl fmt::Display for DimCompo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let str = match self {
+            Self::X => "x",
+            Self::Y => "y",
+            Self::Z => "z",
+        };
+        write!(f, "{}", str)
+    }
 }
 
 #[span_derive(PartialEq, Eq, Hash)]
@@ -1442,7 +1459,7 @@ pub enum ScalarTy {
     F32,
     F64,
     Bool,
-    Gpu,
+    Npu,
 }
 
 #[derive(PartialEq, Eq, Hash, Debug, Copy, Clone)]
@@ -1460,9 +1477,8 @@ pub enum Provenance {
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub enum Memory {
     CpuMem,
-    GpuGlobal,
-    GpuShared,
-    GpuLocal,
+    NpuGm,
+    NpuUb,
     Ident(Ident),
 }
 
@@ -1568,6 +1584,46 @@ pub enum Nat {
     App(Ident, Box<[Nat]>),
 }
 
+impl fmt::Display for BinOpNat {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let str = match self {
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Mul => "*",
+            Self::Div => "/",
+            Self::Mod => "%",
+        };
+        write!(f, "{}", str)
+    }
+}
+
+impl fmt::Display for Nat {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Ident(ident) => write!(f, "{}", ident),
+            Self::Lit(n) => write!(f, "{}", n),
+            Self::ThreadIdx(dim) => write!(f, "threadIdx.{}", dim),
+            Self::BlockIdx(dim) => write!(f, "blockIdx.{}", dim),
+            Self::BlockDim(dim) => write!(f, "blockDim.{}", dim),
+            Self::WarpGrpIdx => write!(f, "warpGrpIdx"),
+            Self::WarpIdx => write!(f, "warpIdx"),
+            Self::LaneIdx => write!(f, "laneIdx"),
+            Self::GridIdx => write!(f, "gridIdx"),
+            Self::BinOp(op, left, right) => write!(f, "({} {} {})", left, op, right),
+            Self::App(ident, args) => {
+                write!(f, "{}(", ident)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
 pub struct NatCtx {
     frames: Vec<Vec<(Box<str>, usize)>>,
 }
@@ -1593,13 +1649,11 @@ impl NatCtx {
     }
 
     pub fn find(&self, name: &str) -> Option<usize> {
-        self.frames.iter().flatten().rev().find_map(|(i, n)| {
-            if i.as_ref() == name {
-                Some(*n)
-            } else {
-                None
-            }
-        })
+        self.frames
+            .iter()
+            .flatten()
+            .rev()
+            .find_map(|(i, n)| if i.as_ref() == name { Some(*n) } else { None })
     }
 
     pub fn push_empty_frame(&mut self) -> &mut Self {
@@ -1619,6 +1673,7 @@ impl NatCtx {
 }
 
 #[derive(Debug)]
+#[allow(unused)]
 pub struct NatEvalError {
     unevaluable: Nat,
 }

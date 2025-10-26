@@ -1,0 +1,12 @@
+---
+source: tests/mlir.rs
+expression: output
+---
+module {
+  func.func @main() {
+    %alloca = memref.alloca() : memref<16xi16>
+    %alloca_0 = memref.alloca() : memref<16xi16>
+    %alloca_1 = memref.alloca() : memref<16xi16>
+    return
+  }
+}

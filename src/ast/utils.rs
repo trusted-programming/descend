@@ -1,10 +1,10 @@
-use crate::ast::visit::walk_list;
 use crate::ast::visit::Visit;
+use crate::ast::visit::walk_list;
 use crate::ast::visit_mut::VisitMut;
 use crate::ast::{
-    visit, visit_mut, ArgKinded, BaseExec, DataTy, DataTyKind, Dim, ExecExpr, ExecTy, Expr,
-    ExprKind, FnTy, FunDef, Ident, IdentExec, IdentKinded, Kind, Memory, Nat, ParamSig, Provenance,
-    Ty, TyKind,
+    ArgKinded, BaseExec, DataTy, DataTyKind, Dim, ExecExpr, ExecTy, Expr, ExprKind, FnTy, FunDef,
+    Ident, IdentExec, IdentKinded, Kind, Memory, Nat, ParamSig, Provenance, Ty, TyKind, visit,
+    visit_mut,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicI32, Ordering};

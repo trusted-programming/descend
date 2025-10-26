@@ -3,20 +3,20 @@ fn matmul<bs: nat, m: nat, n: nat, k: nat, a: prv, b: prv, c: prv>(
     hb_mat: &b shrd cpu.mem [i32; n*k],
     hc_mat: &c uniq cpu.mem [i32; m*k]
 ) -[t: cpu.thread]-> () {
-    let mut gpu = gpu_device(0);
+    let mut npu = npu_device(0);
 
-    let a_mat = gpu_alloc_copy(&uniq gpu, &shrd *ha_mat);
-    let b_mat = gpu_alloc_copy(&uniq gpu, &shrd *hb_mat);
-    let mut c_mat = gpu_alloc_copy(&uniq gpu, &shrd *hc_mat);
-    gpu_matmul::<<<XY<k/bs, m/bs>, XY<bs, bs>>>>(&shrd a_mat, &shrd b_mat, &uniq c_mat);
+    let a_mat = npu_alloc_copy(&uniq npu, &shrd *ha_mat);
+    let b_mat = npu_alloc_copy(&uniq npu, &shrd *hb_mat);
+    let mut c_mat = npu_alloc_copy(&uniq npu, &shrd *hc_mat);
+    npu_matmul::<<<XY<k/bs, m/bs>, XY<bs, bs>>>>(&shrd a_mat, &shrd b_mat, &uniq c_mat);
     copy_to_host(&shrd c_mat, hc_mat)
 }
 
-fn gpu_matmul<bs: nat, m: nat, n: nat, k: nat, r: prv>(
-    a_mat: &r shrd gpu.global [i32; m*n],
-    b_mat: &r shrd gpu.global [i32; n*k],
-    c_mat: &r uniq gpu.global [i32; m*k]
-) -[grid: gpu.grid<XY<k/bs, m/bs>, XY<bs, bs>>]-> () {
+fn npu_matmul<bs: nat, m: nat, n: nat, k: nat, r: prv>(
+    a_mat: &r shrd npu.global [i32; m*n],
+    b_mat: &r shrd npu.global [i32; n*k],
+    c_mat: &r uniq npu.global [i32; m*k]
+) -[grid: npu.grid<XY<k/bs, m/bs>, XY<bs, bs>>]-> () {
     sched(Y) block_row in grid {
         sched(X) block in block_row {
             sched(Y) thread_row in block {
